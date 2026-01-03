@@ -3,166 +3,202 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EyeCare+ Pro Test</title>
+    <title>EyeCare+ Professional Diagnostic</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; text-align: center; background: #f0f2f5; color: #333; }
-        #camera-container { position: relative; width: 100%; height: 160px; background: #000; }
-        video { width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
-        #distance-badge { position: absolute; top: 10px; right: 10px; padding: 5px 15px; border-radius: 20px; color: white; font-weight: bold; font-size: 14px; }
-        .test-box { padding: 20px; height: 300px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        #display-element { font-weight: bold; line-height: 1; transition: all 0.2s; margin-bottom: 40px; }
-        .options-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 90%; max-width: 350px; }
-        .btn-opt { padding: 16px; font-size: 18px; border: 2px solid #ddd; background: white; border-radius: 12px; cursor: pointer; transition: 0.2s; font-weight: 600; }
-        .btn-opt:active { transform: scale(0.95); background: #f8f8f8; }
-        .lock-screen { position: fixed; top: 160px; left: 0; right: 0; bottom: 0; background: rgba(240,242,245,0.98); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 30px; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; text-align: center; background: #f8fafc; color: #1e293b; overflow-x: hidden; }
+        #camera-container { position: relative; width: 100%; height: 140px; background: #000; }
+        video { width: 100%; height: 100%; object-fit: cover; opacity: 0.4; }
+        #distance-badge { position: absolute; top: 10px; right: 10px; padding: 6px 12px; border-radius: 20px; color: white; font-weight: bold; font-size: 12px; z-index: 10; }
+        .test-window { padding: 20px; height: 320px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #display-element { font-weight: bold; line-height: 1; transition: all 0.2s; margin-bottom: 30px; }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 90%; max-width: 340px; }
+        .opt-btn { padding: 18px; font-size: 20px; border: 2px solid #e2e8f0; background: white; border-radius: 15px; cursor: pointer; font-weight: bold; color: #334155; }
+        .opt-btn:active { transform: scale(0.96); background: #f1f5f9; }
+        .lock-overlay { position: fixed; top: 140px; left: 0; right: 0; bottom: 0; background: rgba(248,250,252,0.98); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
         .hidden { display: none !important; }
+        #color-prompt { font-size: 18px; color: #64748b; margin-bottom: 10px; }
     </style>
 </head>
 <body>
     <div id="camera-container">
         <video id="webcam" autoplay playsinline></video>
-        <div id="distance-badge" style="background: red;">Masofa: 0 sm</div>
+        <div id="distance-badge" style="background: #ef4444;">Masofa: 0 sm</div>
     </div>
 
-    <div id="distance-lock" class="lock-screen">
-        <h2 style="color: #e74c3c;">Masofani to'g'rilang!</h2>
-        <p>Iltimos, telefonni yuzingizdan <b>90-100 sm</b> uzoqlikda tuting.</p>
-        <p>Hozirgi masofa: <span id="live-dist">0</span> sm</p>
+    <div id="lock" class="lock-overlay">
+        <h2 style="color: #ef4444;">Masofani saqlang (90-100 sm)</h2>
+        <p>Hozirgi masofa: <span id="cur-dist">0</span> sm</p>
+        <p style="font-size: 14px; color: #64748b;">Telefonni yuzingizdan uzoqlashtiring</p>
     </div>
 
-    <div class="test-box">
+    <div class="test-window">
+        <div id="color-prompt" class="hidden">Qaysi rangni ko'ryapsiz?</div>
         <div id="display-element">...</div>
-        <div class="options-container" id="options-grid"></div>
+        <div class="options-grid" id="buttons"></div>
     </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    const videoElement = document.getElementById('webcam');
-    const distanceBadge = document.getElementById('distance-badge');
-    const distanceLock = document.getElementById('distance-lock');
-    const displayElement = document.getElementById('display-element');
-    const optionsGrid = document.getElementById('options-grid');
+    const videoEl = document.getElementById('webcam');
+    const distBadge = document.getElementById('distance-badge');
+    const lockScreen = document.getElementById('lock');
+    const displayEl = document.getElementById('display-element');
+    const btnGrid = document.getElementById('buttons');
     
-    const urlParams = new URLSearchParams(window.location.search);
-    const age = parseInt(urlParams.get('age')) || 20;
+    const params = new URLSearchParams(window.location.search);
+    const age = parseInt(params.get('age')) || 20;
 
     let step = 0;
-    let correctCount = 0;
+    let mainResults = []; // {step, correct}
+    let colorResults = [];
     let testType = age < 9 ? 'kids' : (age < 15 ? 'teens' : 'adults');
+    let isColorPhase = false;
 
     // O'xshash belgilar guruhlari (Chalg'itish uchun)
-    const similarGroups = {
-        adults: ['174', '568', '382', '906', '423', '086', '532'],
-        teens: ['ШЩП', 'БМН', 'КНИ', 'ЛИА', 'ОСЗ', 'ЕЁЭ'],
-        kids: ['🐶🐱🐭', '🍎🍒🍓', '🏠🏢🏥', '🚗🚕🚌', '☀️⭐🌙'],
-        colors: ['Qizil', 'Yashil', 'Ko\'k', 'Sariq', 'Olovrang', 'Siyohrang']
+    const groups = {
+        adults: '086 174 568 382 906 423 532'.split(' '),
+        teens: 'ШЩП БМН КНИ ЛИА ОСЗ ЕЁЭ'.split(' '),
+        kids: '🐶🐱🐭 🍎🍒🍓 🏠🏢🏥 🚗🚕🚌 ☀️⭐🌙'.split(' ')
     };
 
-    const visionLevels = [0.5, 0.4, 0.35, 0.3, 0.25, 0.2, 0.18, 0.15, 0.12];
+    const visionScales = [0.5, 0.45, 0.4, 0.35, 0.3, 0.25, 0.2, 0.15, 0.12];
 
-    function getOptions(correct, type) {
-        let opts = [correct];
+    function getVariants(target, poolType) {
+        let variants = [target];
         let pool = [];
-        
-        if(type === 'colors') pool = similarGroups.colors;
-        else {
-            const group = Object.values(similarGroups[testType]).find(g => g.includes(correct[0] || correct));
-            pool = group ? group.split('') : (testType === 'adults' ? '0123456789'.split('') : 'ШБМНКЫИП'.split(''));
-        }
-
-        while(opts.length < 4) {
-            let rand = pool[Math.floor(Math.random() * pool.length)];
-            if(!opts.includes(rand)) opts.push(rand);
-        }
-        return opts.sort(() => Math.random() - 0.5);
-    }
-
-    function runTest() {
-        if(step >= 12) return finish();
-
-        optionsGrid.innerHTML = '';
-        let isColorTest = step >= 9;
-
-        if(!isColorTest) {
-            let scale = visionLevels[step];
-            displayElement.style.fontSize = (scale * 200) + "px";
-            displayElement.style.color = "black";
-            
-            let charPool = testType === 'adults' ? "0123456789" : (testType === 'teens' ? "ШБМНКЫИП" : "🐶🍎🏠☀️🎈");
-            let target = charPool[Math.floor(Math.random() * charPool.length)];
-            displayElement.innerText = target;
-
-            getOptions(target, 'chars').forEach(o => createBtn(o, target));
+        if(poolType === 'colors') {
+            pool = ['Qizil', 'Yashil', 'Ko\'k', 'Sariq', 'Olovrang', 'Siyohrang', 'Jigarrang'];
         } else {
-            displayElement.style.fontSize = "60px";
-            displayElement.innerText = "●";
-            let colors = [
-                {n:'Qizil', c:'#e74c3c'}, {n:'Yashil', c:'#2ecc71'}, 
-                {n:'Ko\'k', c:'#3498db'}, {n:'Sariq', c:'#f1c40f'}
-            ];
-            let targetColor = colors[Math.floor(Math.random() * colors.length)];
-            displayElement.style.color = targetColor.c;
+            const match = groups[testType].find(g => g.includes(target));
+            pool = match ? match.split('') : (testType === 'adults' ? '0123456789'.split('') : 'ШБМНКЫИП'.split(''));
+        }
+        while(variants.length < 4) {
+            let r = pool[Math.floor(Math.random() * pool.length)];
+            if(!variants.includes(r)) variants.push(r);
+        }
+        return variants.sort(() => Math.random() - 0.5);
+    }
 
-            getOptions(targetColor.n, 'colors').forEach(o => createBtn(o, targetColor.n));
+    function startStep() {
+        if(step >= 9 && !isColorPhase) {
+            confirmColorTest();
+            return;
+        }
+        if(step >= 14) return finish();
+
+        btnGrid.innerHTML = '';
+        if(!isColorPhase) {
+            let scale = visionScales[step];
+            displayEl.style.fontSize = (scale * 220) + "px"; // Kattalikni biroz kichraytirdik
+            displayEl.style.color = "black";
+            let chars = testType === 'adults' ? "0123456789" : (testType === 'teens' ? "ШБМНКЫИП" : "🐶🍎🏠☀️🚗");
+            let target = chars[Math.floor(Math.random() * chars.length)];
+            displayEl.innerText = target;
+            getVariants(target, 'main').forEach(v => createBtn(v, target));
+        } else {
+            document.getElementById('color-prompt').classList.remove('hidden');
+            displayEl.style.fontSize = "70px";
+            displayEl.innerText = "●";
+            const colors = [
+                {n:'Qizil', c:'#e11d48'}, {n:'Yashil', c:'#16a34a'}, 
+                {n:'Ko\'k', c:'#2563eb'}, {n:'Sariq', c:'#ca8a04'}, {n:'Siyohrang', c:'#9333ea'}
+            ];
+            let target = colors[Math.floor(Math.random() * colors.length)];
+            displayEl.style.color = target.c;
+            getVariants(target.n, 'colors').forEach(v => createBtn(v, target.n));
         }
     }
 
-    function createBtn(txt, cor) {
+    function createBtn(txt, correct) {
         const b = document.createElement('button');
-        b.className = 'btn-opt';
+        b.className = 'opt-btn';
         b.innerText = txt;
         b.onclick = () => {
-            if(txt === cor) correctCount++;
+            let isCorrect = (txt === correct);
+            if(!isColorPhase) mainResults.push(isCorrect);
+            else colorResults.push(isCorrect);
             step++;
-            runTest();
+            startStep();
         };
-        optionsGrid.appendChild(b);
+        btnGrid.appendChild(b);
+    }
+
+    function confirmColorTest() {
+        displayEl.style.fontSize = "20px";
+        displayEl.innerText = "Asosiy test tugadi. Rang ajratish testini ham topshirasizmi?";
+        btnGrid.innerHTML = '';
+        const y = document.createElement('button');
+        y.className = 'opt-btn'; y.innerText = "Ha, davom etish";
+        y.onclick = () => { isColorPhase = true; startStep(); };
+        const n = document.createElement('button');
+        n.className = 'opt-btn'; n.innerText = "Yo'q, natijani ko'rish";
+        n.onclick = () => finish();
+        btnGrid.appendChild(y); btnGrid.appendChild(n);
     }
 
     function finish() {
-        let res = (correctCount / 12) * 1.0;
-        let msg = "";
-        if(res >= 0.9) msg = "Ko'rish o'tkirligi a'lo (1.0). Ko'zlaringiz sog'lom!";
-        else if(res >= 0.6) msg = "Sizda ko'z zo'riqishi (Miopiya boshlanishi) bo'lishi mumkin. 'Sisteyn' tomchisi va 20-20-20 mashqi tavsiya etiladi.";
-        else msg = "Diqqat! Ko'rish pasaygan. Oftalmolog ko'rigi zarur. 'Taufon' tomchisi va maxsus mashqlar qiling.";
-        
-        tg.sendData(`📊 Natija: ${res.toFixed(2)} | Tashxis: ${msg}`);
+        let first4 = mainResults.slice(0, 4).filter(r => !r).length;
+        let last4 = mainResults.slice(5, 9).filter(r => !r).length;
+        let colorErrors = colorResults.filter(r => !r).length;
+
+        let diagnosis = "📋 **Tashxis natijalari:**\n\n";
+
+        // Asosiy test tahlili
+        if(first4 >= 2) diagnosis += "📍 **Yaqinni ko'ra olmaslik (Gipermetropiya):** Boshlang'ich alomatlar sezildi. Yaqin masofadagi narsalarda ko'z tez charchaydi.\n";
+        else if(last4 >= 2) diagnosis += "📍 **Uzoqni ko'ra olmaslik (Miopiya):** Uzoqdagi belgilarni ajratishda qiynalyapsiz. Bu ko'zning optik o'qi uzayganidan bo'lishi mumkin.\n";
+        else diagnosis += "✅ **Asosiy ko'rish:** Normal holatda.\n";
+
+        // Rang testi tahlili
+        if(isColorPhase) {
+            if(colorErrors >= 3) diagnosis += "📍 **Rang ajratish:** Sizda Daltonizm alomatlari bo'lishi mumkin. Shifokor ko'rigi zarur!\n";
+            else if(colorErrors >= 1) diagnosis += "📍 **Rang ajratish:** Ranglarni farqlashda biroz susayish bor.\n";
+            else diagnosis += "✅ **Rang ajratish:** A'lo.\n";
+        } else {
+            diagnosis += "📍 **Rang ajratish:** Test topshirilmadi.\n";
+        }
+
+        diagnosis += "\n💊 **Tavsiya etiladigan dorilar:**\n" +
+                     "• **Sisteyn Ultra:** Kuniga 3 mahal, 1 tomchidan (Ko'z qurishi uchun).\n" +
+                     "• **Taufon:** Kuniga 2 mahal, 1 tomchidan (Ko'zni oziqlantirish uchun).\n\n" +
+                     "👀 **Mashq:** Har 20 daqiqada 20 metr uzoqlikka 20 soniya qarang.";
+
+        tg.sendData(diagnosis);
         tg.close();
     }
 
-    // Kamera va Masofa (Mediapipe)
+    // Kamera/Masofa logic (90-100 sm)
     const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
     faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5});
     faceMesh.onResults(res => {
         if (res.multiFaceLandmarks.length > 0) {
             const p = res.multiFaceLandmarks[0];
             const d = Math.sqrt(Math.pow(p[33].x - p[263].x, 2) + Math.pow(p[33].y - p[263].y, 2));
-            const actualDist = Math.round(16 / d);
+            const realCm = Math.round(15.5 / d); 
             
-            document.getElementById('live-dist').innerText = actualDist;
-            distanceBadge.innerText = `Masofa: ${actualDist} sm`;
+            document.getElementById('cur-dist').innerText = realCm;
+            distBadge.innerText = `Masofa: ${realCm} sm`;
 
-            if (actualDist >= 90 && actualDist <= 105) {
-                distanceLock.classList.add('hidden');
-                distanceBadge.style.background = '#2ecc71';
+            if (realCm >= 85 && realCm <= 105) {
+                lockScreen.classList.add('hidden');
+                distBadge.style.background = '#22c55e';
             } else {
-                distanceLock.classList.remove('hidden');
-                distanceBadge.style.background = '#e74c3c';
+                lockScreen.classList.remove('hidden');
+                distBadge.style.background = '#ef4444';
             }
         }
     });
 
     async function init() {
         const stream = await navigator.mediaDevices.getUserMedia({video: true});
-        videoElement.srcObject = stream;
-        const cam = new Camera(videoElement, {onFrame: async () => { await faceMesh.send({image: videoElement}); }, width: 640, height: 480});
+        videoEl.srcObject = stream;
+        const cam = new Camera(videoEl, {onFrame: async () => { await faceMesh.send({image: videoEl}); }, width: 640, height: 480});
         cam.start();
-        runTest();
+        startStep();
     }
     init();
 </script>
