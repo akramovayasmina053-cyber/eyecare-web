@@ -2,155 +2,227 @@
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EyeCare+ Pro Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EyeCare+ Professional Vision Test</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <style>
-        body { font-family: sans-serif; margin: 0; text-align: center; background: #f4f7f6; }
-        #camera-container { position: relative; width: 100%; height: 180px; background: #000; overflow: hidden; }
-        video { width: 100%; height: 100%; object-fit: cover; opacity: 0.6; }
-        #distance-info { position: absolute; top: 10px; right: 10px; padding: 5px 10px; border-radius: 20px; color: white; font-weight: bold; }
-        .test-area { padding: 20px; min-height: 250px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        #display-element { font-size: 60px; margin-bottom: 30px; transition: all 0.3s; }
-        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 90%; max-width: 400px; }
-        .opt-btn { padding: 15px; font-size: 18px; border: none; background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); cursor: pointer; }
-        .opt-btn:active { background: #e0e0e0; }
-        .overlay { position: fixed; top: 180px; left: 0; right: 0; bottom: 0; background: rgba(244,247,246,0.95); display: flex; justify-content: center; align-items: center; z-index: 100; text-align: center; padding: 20px; }
-        .hidden { display: none; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; background: #ffffff; height: 100vh; overflow: hidden; color: #333; }
+        #camera-container { position: relative; width: 100%; height: 20vh; background: #000; border-bottom: 2px solid #eee; }
+        video { width: 100%; height: 100%; object-fit: cover; opacity: 0.4; }
+        #distance-badge { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: #fff; padding: 6px 12px; border-radius: 15px; font-size: 12px; font-weight: bold; z-index: 10; transition: 0.3s; }
+        #test-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 20px; position: relative; }
+        #display-element { font-weight: bold; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); user-select: none; text-align: center; display: none; }
+        .ui-container { margin-top: 30px; text-align: center; width: 100%; }
+        .btn { background: #007bff; color: white; border: none; padding: 14px 30px; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin: 8px; transition: 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn:active { transform: translateY(2px); box-shadow: none; }
+        .btn-green { background: #28a745; }
+        .btn-red { background: #dc3545; }
+        #info-panel { margin-bottom: 15px; text-align: center; }
+        .level-text { font-size: 18px; color: #007bff; font-weight: bold; }
+        #warning-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; z-index: 50; text-align: center; padding: 20px; display: none; }
     </style>
 </head>
 <body>
-    <div id="camera-container">
-        <video id="webcam" autoplay playsinline></video>
-        <div id="distance-info">Masofa: -- sm</div>
+
+<div id="camera-container">
+    <video id="webcam" autoplay playsinline></video>
+    <div id="distance-badge">Masofa: -- sm</div>
+</div>
+
+<div id="test-area">
+    <div id="warning-overlay">
+        <div>
+            <h2 style="color:#dc3545">Masofa noto'g'ri!</h2>
+            <p>Iltimos, telefonni yuzingizdan 40-50 sm masofada tuting.</p>
+        </div>
     </div>
 
-    <div id="dist-warn" class="overlay">
-        <h2>Masofani sozlang!</h2>
-        <p>Iltimos, telefonni yuzingizdan <b>90-100 sm</b> uzoqlikda tuting.<br>Hozirgi masofa: <span id="cur-dist">0</span> sm</p>
+    <div id="info-panel">
+        <div id="step-title" style="font-size: 14px; color: #888;">Tayyor bo'lsangiz boshlang</div>
+        <div id="level-display" class="level-text"></div>
     </div>
 
-    <div class="test-area">
-        <div id="display-element">...</div>
-        <div class="options-grid" id="options"></div>
+    <div id="display-element">👁️</div>
+    
+    <div class="ui-container" id="controls">
+        <button class="btn" id="start-btn" onclick="initExperience()">Kamerani yoqish va boshlash</button>
     </div>
+</div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
-
-    const videoElement = document.getElementById('webcam');
-    const distanceInfo = document.getElementById('distance-info');
-    const distWarn = document.getElementById('dist-warn');
-    const displayElement = document.getElementById('display-element');
-    const optionsGrid = document.getElementById('options');
     
     const urlParams = new URLSearchParams(window.location.search);
     const age = parseInt(urlParams.get('age')) || 20;
 
-    let currentStep = 0;
-    let correctAnswers = 0;
-    let isDistanceOk = false;
-    let testType = age < 9 ? 'kids' : (age < 15 ? 'teens' : 'adults');
+    const display = document.getElementById('display-element');
+    const infoTitle = document.getElementById('step-title');
+    const levelDisplay = document.getElementById('level-display');
+    const controls = document.getElementById('controls');
+    const badge = document.getElementById('distance-badge');
+    const warning = document.getElementById('warning-overlay');
 
-    const datasets = {
-        kids: ['🐶', '🐱', '🍎', '🏠', '🚗', '☀️', '🎈', '🍌', '🐘'],
-        teens: ['Ш', 'Б', 'М', 'Н', 'К', 'Ы', 'И', 'П', 'Л'],
-        adults: ['1', '5', '8', '3', '2', '9', '0', '6', '4'],
-        colors: [
-            {n: 'Qizil', c: '#ff0000'}, {n: 'Yashil', c: '#00ff00'}, 
-            {n: 'Ko\'k', c: '#0000ff'}, {n: 'Sariq', c: '#ffff00'}
-        ]
+    // Test mantiqi o'zgaruvchilari
+    let testType = 'main'; // 'main' yoki 'color'
+    let currentLevel = 0.1; 
+    let stepCount = 0;
+    let history = []; 
+    let correctAnswers = 0;
+
+    const assets = {
+        kids: ['🐶', '🐱', '🦁', '🐷', '🍎', '🏠', '🚗', '⭐', '🎈', '🐝'],
+        teens: ['Ш', 'Б', 'М', 'Н', 'К', 'Ы', 'И', 'П', 'Л', 'У'],
+        adults: ['1', '5', '8', '0', '3', '6', '9', '4', '7', '2'],
+        colors: ['#e63946', '#2a9d8f', '#f4a261', '#e9c46a', '#457b9d', '#1d3557', '#8338ec', '#fb5607']
     };
 
-    function generateOptions(correct) {
-        let options = [correct];
-        let pool = currentStep < 9 ? datasets[testType] : datasets.colors.map(i => i.n);
-        while(options.length < 4) {
-            let rand = pool[Math.floor(Math.random() * pool.length)];
-            if(!options.includes(rand)) options.push(rand);
-        }
-        return options.sort(() => Math.random() - 0.5);
-    }
-
-    function nextQuestion() {
-        if (currentStep >= 13) return finishTest();
-        
-        optionsGrid.innerHTML = '';
-        let size = 60 - (currentStep * 5); // Har safar kichrayadi
-        displayElement.style.fontSize = size + 'px';
-
-        if (currentStep < 9) {
-            let symbol = datasets[testType][currentStep];
-            displayElement.innerText = symbol;
-            displayElement.style.color = 'black';
-            generateOptions(symbol).forEach(opt => createBtn(opt, symbol));
+    function getSmartRandom() {
+        let pool;
+        if (testType === 'main') {
+            pool = age <= 8 ? assets.kids : (age <= 14 ? assets.teens : assets.adults);
         } else {
-            let colorObj = datasets.colors[currentStep - 9];
-            displayElement.innerText = '● RANGNI TANLANG';
-            displayElement.style.color = colorObj.c;
-            generateOptions(colorObj.n).forEach(opt => createBtn(opt, colorObj.n));
+            pool = assets.colors;
+        }
+
+        // Oxirgi 4 ta savolda chiqmaganini tanlash
+        let available = pool.filter(item => !history.slice(-5).includes(item));
+        if (available.length === 0) available = pool;
+
+        const chosen = available[Math.floor(Math.random() * available.length)];
+        history.push(chosen);
+        return chosen;
+    }
+
+    async function initExperience() {
+        controls.innerHTML = "Kamera yuklanmoqda...";
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            document.getElementById('webcam').srcObject = stream;
+            setupAI();
+            startMainTest();
+        } catch (e) {
+            alert("Kameraga ruxsat berilmadi!");
         }
     }
 
-    function createBtn(text, correct) {
-        const btn = document.createElement('button');
-        btn.className = 'opt-btn';
-        btn.innerText = text;
-        btn.onclick = () => {
-            if(text === correct) correctAnswers++;
-            currentStep++;
-            nextQuestion();
-        };
-        optionsGrid.appendChild(btn);
+    function startMainTest() {
+        testType = 'main';
+        stepCount = 0;
+        currentLevel = 0.1;
+        renderStep();
     }
 
-    function finishTest() {
-        let score = (correctAnswers / 13) * 100;
-        let diagnosis = "";
-        if(score > 80) diagnosis = "Sizning ko'rishingiz a'lo darajada!";
-        else if(score > 50) diagnosis = "Sizda ko'z zo'riqishi alomatlari bor. 20-20-20 qoidasiga amal qiling va 'Sisteyn' tomchilaridan foydalanishni maslahat beramiz.";
-        else diagnosis = "Sizda boshlang'ich miopiya bo'lishi mumkin. Oftalmolog ko'rigidan o'ting. 'Taufon' tomchilari charchoqni oladi.";
+    function renderStep() {
+        // Asosiy test yakuni (9 ta savol)
+        if (testType === 'main' && stepCount >= 9) {
+            askForColorTest();
+            return;
+        }
+        // Rang testi yakuni (5 ta savol)
+        if (testType === 'color' && stepCount >= 5) {
+            completeTest();
+            return;
+        }
+
+        const item = getSmartRandom();
+        display.style.display = 'block';
+
+        if (testType === 'main') {
+            display.innerText = item;
+            display.style.color = '#000';
+            // 0.1 darajadan 0.9 gacha kichrayish logikasi
+            let fontSize = 140 - (currentLevel * 130); 
+            display.style.fontSize = Math.max(fontSize, 15) + "px";
+            infoTitle.innerText = `Asosiy test: ${stepCount + 1}/9`;
+            levelDisplay.innerText = `Ko'rish o'tkirligi: ${currentLevel.toFixed(1)}`;
+        } else {
+            display.innerText = "●"; 
+            display.style.fontSize = "160px";
+            display.style.color = item;
+            infoTitle.innerText = `Ranglarni ajratish testi`;
+            levelDisplay.innerText = `${stepCount + 1}/5 savol`;
+        }
+
+        controls.innerHTML = `
+            <p style="margin-bottom:10px">Belgini aniq ko'ryapsizmi?</p>
+            <button class="btn btn-green" onclick="processAnswer(true)">Ha, ko'ryapman</button>
+            <button class="btn btn-red" onclick="processAnswer(false)">Yo'q, ko'rinmayapti</button>
+        `;
+    }
+
+    function processAnswer(isCorrect) {
+        if (isCorrect) {
+            correctAnswers++;
+            if (testType === 'main') currentLevel = Math.min(0.9, currentLevel + 0.1);
+        }
+        stepCount++;
+        renderStep();
+    }
+
+    function askForColorTest() {
+        display.style.display = 'none';
+        levelDisplay.innerText = "Asosiy test tugadi";
+        infoTitle.innerText = "Navbatdagi bosqich";
+        controls.innerHTML = `
+            <p>Ranglarni ajratish testini ham topshirasizmi?</p>
+            <button class="btn" onclick="startColorPhase()">Ha, boshlash</button>
+            <button class="btn btn-red" style="background:#666" onclick="completeTest()">Yo'q, natijani ko'rish</button>
+        `;
+    }
+
+    function startColorPhase() {
+        testType = 'color';
+        stepCount = 0;
+        history = []; // Ranglar uchun tarixni tozalash
+        renderStep();
+    }
+
+    function completeTest() {
+        display.innerText = "🎯";
+        display.style.fontSize = "100px";
+        levelDisplay.innerText = "Test muvaffaqiyatli yakunlandi!";
+        infoTitle.innerText = "Natijalar saqlanmoqda...";
+        controls.innerHTML = `<button class="btn" onclick="tg.close()">Botga qaytish</button>`;
         
-        tg.sendData(`Natija: ${score.toFixed(0)}% | Tashxis: ${diagnosis}`);
-        tg.close();
+        const finalData = {
+            score: correctAnswers,
+            max_level: currentLevel.toFixed(1),
+            user_age: age
+        };
+        tg.sendData(JSON.stringify(finalData));
     }
 
-    const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-    faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5});
-    faceMesh.onResults(results => {
-        if (results.multiFaceLandmarks.length > 0) {
-            const points = results.multiFaceLandmarks[0];
-            const p1 = points[33], p2 = points[263];
-            const dist = Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-            const realDist = Math.round(15 / dist); // 90-100 sm uchun kalibrlash
-            
-            document.getElementById('cur-dist').innerText = realDist;
-            distanceInfo.innerText = `Masofa: ${realDist} sm`;
+    async function setupAI() {
+        const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
+        
+        faceMesh.onResults(results => {
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks[0]) {
+                const p = results.multiFaceLandmarks[0];
+                const d = Math.sqrt(Math.pow(p[33].x - p[263].x, 2) + Math.pow(p[33].y - p[263].y, 2));
+                const cm = Math.round(13 / d);
+                badge.innerText = `Masofa: ~${cm} sm`;
 
-            if (realDist >= 90 && realDist <= 110) {
-                isDistanceOk = true;
-                distWarn.classList.add('hidden');
-                distanceInfo.style.background = 'green';
-            } else {
-                isDistanceOk = false;
-                distWarn.classList.remove('hidden');
-                distanceInfo.style.background = 'red';
+                if (cm >= 40 && cm <= 50) {
+                    badge.style.background = "#28a745";
+                    warning.style.display = "none";
+                } else {
+                    badge.style.background = "#dc3545";
+                    warning.style.display = "flex";
+                }
             }
-        }
-    });
+        });
 
-    async function start() {
-        const stream = await navigator.mediaDevices.getUserMedia({video: true});
-        videoElement.srcObject = stream;
-        const camera = new Camera(videoElement, {onFrame: async () => { await faceMesh.send({image: videoElement}); }, width: 640, height: 480});
-        camera.start();
-        nextQuestion();
+        const videoElement = document.getElementById('webcam');
+        async function prediction() {
+            await faceMesh.send({image: videoElement});
+            requestAnimationFrame(prediction);
+        }
+        prediction();
     }
-    start();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
 </body>
 </html>
