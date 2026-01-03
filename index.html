@@ -8,34 +8,33 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; text-align: center; background: #f0f2f5; color: #333; }
-        #camera-container { position: relative; width: 100%; height: 160px; background: #000; }
-        video { width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
-        #distance-badge { position: absolute; top: 10px; right: 10px; padding: 5px 15px; border-radius: 20px; color: white; font-weight: bold; font-size: 14px; }
-        .test-box { padding: 20px; height: 300px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        #display-element { font-weight: bold; line-height: 1; transition: all 0.2s; margin-bottom: 40px; }
-        .options-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 90%; max-width: 350px; }
-        .btn-opt { padding: 16px; font-size: 18px; border: 2px solid #ddd; background: white; border-radius: 12px; cursor: pointer; transition: 0.2s; font-weight: 600; }
-        .btn-opt:active { transform: scale(0.95); background: #f8f8f8; }
-        .lock-screen { position: fixed; top: 160px; left: 0; right: 0; bottom: 0; background: rgba(240,242,245,0.98); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 30px; }
-        .hidden { display: none !important; }
+        body { font-family: sans-serif; margin: 0; text-align: center; background: #f4f7f6; }
+        #camera-container { position: relative; width: 100%; height: 180px; background: #000; overflow: hidden; }
+        video { width: 100%; height: 100%; object-fit: cover; opacity: 0.6; }
+        #distance-info { position: absolute; top: 10px; right: 10px; padding: 5px 10px; border-radius: 20px; color: white; font-weight: bold; }
+        .test-area { padding: 20px; min-height: 250px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #display-element { font-size: 60px; margin-bottom: 30px; transition: all 0.3s; }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 90%; max-width: 400px; }
+        .opt-btn { padding: 15px; font-size: 18px; border: none; background: white; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); cursor: pointer; }
+        .opt-btn:active { background: #e0e0e0; }
+        .overlay { position: fixed; top: 180px; left: 0; right: 0; bottom: 0; background: rgba(244,247,246,0.95); display: flex; justify-content: center; align-items: center; z-index: 100; text-align: center; padding: 20px; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
     <div id="camera-container">
         <video id="webcam" autoplay playsinline></video>
-        <div id="distance-badge" style="background: red;">Masofa: 0 sm</div>
+        <div id="distance-info">Masofa: -- sm</div>
     </div>
 
-    <div id="distance-lock" class="lock-screen">
-        <h2 style="color: #e74c3c;">Masofani to'g'rilang!</h2>
-        <p>Iltimos, telefonni yuzingizdan <b>90-100 sm</b> uzoqlikda tuting.</p>
-        <p>Hozirgi masofa: <span id="live-dist">0</span> sm</p>
+    <div id="dist-warn" class="overlay">
+        <h2>Masofani sozlang!</h2>
+        <p>Iltimos, telefonni yuzingizdan <b>90-100 sm</b> uzoqlikda tuting.<br>Hozirgi masofa: <span id="cur-dist">0</span> sm</p>
     </div>
 
-    <div class="test-box">
+    <div class="test-area">
         <div id="display-element">...</div>
-        <div class="options-container" id="options-grid"></div>
+        <div class="options-grid" id="options"></div>
     </div>
 
 <script>
@@ -43,128 +42,114 @@
     tg.expand();
 
     const videoElement = document.getElementById('webcam');
-    const distanceBadge = document.getElementById('distance-badge');
-    const distanceLock = document.getElementById('distance-lock');
+    const distanceInfo = document.getElementById('distance-info');
+    const distWarn = document.getElementById('dist-warn');
     const displayElement = document.getElementById('display-element');
-    const optionsGrid = document.getElementById('options-grid');
+    const optionsGrid = document.getElementById('options');
     
     const urlParams = new URLSearchParams(window.location.search);
     const age = parseInt(urlParams.get('age')) || 20;
 
-    let step = 0;
-    let correctCount = 0;
+    let currentStep = 0;
+    let correctAnswers = 0;
+    let isDistanceOk = false;
     let testType = age < 9 ? 'kids' : (age < 15 ? 'teens' : 'adults');
 
-    // O'xshash belgilar guruhlari (Chalg'itish uchun)
-    const similarGroups = {
-        adults: ['174', '568', '382', '906', '423', '086', '532'],
-        teens: ['ШЩП', 'БМН', 'КНИ', 'ЛИА', 'ОСЗ', 'ЕЁЭ'],
-        kids: ['🐶🐱🐭', '🍎🍒🍓', '🏠🏢🏥', '🚗🚕🚌', '☀️⭐🌙'],
-        colors: ['Qizil', 'Yashil', 'Ko\'k', 'Sariq', 'Olovrang', 'Siyohrang']
+    const datasets = {
+        kids: ['🐶', '🐱', '🍎', '🏠', '🚗', '☀️', '🎈', '🍌', '🐘'],
+        teens: ['Ш', 'Б', 'М', 'Н', 'К', 'Ы', 'И', 'П', 'Л'],
+        adults: ['1', '5', '8', '3', '2', '9', '0', '6', '4'],
+        colors: [
+            {n: 'Qizil', c: '#ff0000'}, {n: 'Yashil', c: '#00ff00'}, 
+            {n: 'Ko\'k', c: '#0000ff'}, {n: 'Sariq', c: '#ffff00'}
+        ]
     };
 
-    const visionLevels = [0.5, 0.4, 0.35, 0.3, 0.25, 0.2, 0.18, 0.15, 0.12];
-
-    function getOptions(correct, type) {
-        let opts = [correct];
-        let pool = [];
-        
-        if(type === 'colors') pool = similarGroups.colors;
-        else {
-            const group = Object.values(similarGroups[testType]).find(g => g.includes(correct[0] || correct));
-            pool = group ? group.split('') : (testType === 'adults' ? '0123456789'.split('') : 'ШБМНКЫИП'.split(''));
-        }
-
-        while(opts.length < 4) {
+    function generateOptions(correct) {
+        let options = [correct];
+        let pool = currentStep < 9 ? datasets[testType] : datasets.colors.map(i => i.n);
+        while(options.length < 4) {
             let rand = pool[Math.floor(Math.random() * pool.length)];
-            if(!opts.includes(rand)) opts.push(rand);
+            if(!options.includes(rand)) options.push(rand);
         }
-        return opts.sort(() => Math.random() - 0.5);
+        return options.sort(() => Math.random() - 0.5);
     }
 
-    function runTest() {
-        if(step >= 12) return finish();
-
-        optionsGrid.innerHTML = '';
-        let isColorTest = step >= 9;
-
-        if(!isColorTest) {
-            let scale = visionLevels[step];
-            displayElement.style.fontSize = (scale * 200) + "px";
-            displayElement.style.color = "black";
-            
-            let charPool = testType === 'adults' ? "0123456789" : (testType === 'teens' ? "ШБМНКЫИП" : "🐶🍎🏠☀️🎈");
-            let target = charPool[Math.floor(Math.random() * charPool.length)];
-            displayElement.innerText = target;
-
-            getOptions(target, 'chars').forEach(o => createBtn(o, target));
-        } else {
-            displayElement.style.fontSize = "60px";
-            displayElement.innerText = "●";
-            let colors = [
-                {n:'Qizil', c:'#e74c3c'}, {n:'Yashil', c:'#2ecc71'}, 
-                {n:'Ko\'k', c:'#3498db'}, {n:'Sariq', c:'#f1c40f'}
-            ];
-            let targetColor = colors[Math.floor(Math.random() * colors.length)];
-            displayElement.style.color = targetColor.c;
-
-            getOptions(targetColor.n, 'colors').forEach(o => createBtn(o, targetColor.n));
-        }
-    }
-
-    function createBtn(txt, cor) {
-        const b = document.createElement('button');
-        b.className = 'btn-opt';
-        b.innerText = txt;
-        b.onclick = () => {
-            if(txt === cor) correctCount++;
-            step++;
-            runTest();
-        };
-        optionsGrid.appendChild(b);
-    }
-
-    function finish() {
-        let res = (correctCount / 12) * 1.0;
-        let msg = "";
-        if(res >= 0.9) msg = "Ko'rish o'tkirligi a'lo (1.0). Ko'zlaringiz sog'lom!";
-        else if(res >= 0.6) msg = "Sizda ko'z zo'riqishi (Miopiya boshlanishi) bo'lishi mumkin. 'Sisteyn' tomchisi va 20-20-20 mashqi tavsiya etiladi.";
-        else msg = "Diqqat! Ko'rish pasaygan. Oftalmolog ko'rigi zarur. 'Taufon' tomchisi va maxsus mashqlar qiling.";
+    function nextQuestion() {
+        if (currentStep >= 13) return finishTest();
         
-        tg.sendData(`📊 Natija: ${res.toFixed(2)} | Tashxis: ${msg}`);
+        optionsGrid.innerHTML = '';
+        let size = 60 - (currentStep * 5); // Har safar kichrayadi
+        displayElement.style.fontSize = size + 'px';
+
+        if (currentStep < 9) {
+            let symbol = datasets[testType][currentStep];
+            displayElement.innerText = symbol;
+            displayElement.style.color = 'black';
+            generateOptions(symbol).forEach(opt => createBtn(opt, symbol));
+        } else {
+            let colorObj = datasets.colors[currentStep - 9];
+            displayElement.innerText = '● RANGNI TANLANG';
+            displayElement.style.color = colorObj.c;
+            generateOptions(colorObj.n).forEach(opt => createBtn(opt, colorObj.n));
+        }
+    }
+
+    function createBtn(text, correct) {
+        const btn = document.createElement('button');
+        btn.className = 'opt-btn';
+        btn.innerText = text;
+        btn.onclick = () => {
+            if(text === correct) correctAnswers++;
+            currentStep++;
+            nextQuestion();
+        };
+        optionsGrid.appendChild(btn);
+    }
+
+    function finishTest() {
+        let score = (correctAnswers / 13) * 100;
+        let diagnosis = "";
+        if(score > 80) diagnosis = "Sizning ko'rishingiz a'lo darajada!";
+        else if(score > 50) diagnosis = "Sizda ko'z zo'riqishi alomatlari bor. 20-20-20 qoidasiga amal qiling va 'Sisteyn' tomchilaridan foydalanishni maslahat beramiz.";
+        else diagnosis = "Sizda boshlang'ich miopiya bo'lishi mumkin. Oftalmolog ko'rigidan o'ting. 'Taufon' tomchilari charchoqni oladi.";
+        
+        tg.sendData(`Natija: ${score.toFixed(0)}% | Tashxis: ${diagnosis}`);
         tg.close();
     }
 
-    // Kamera va Masofa (Mediapipe)
-    const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+    const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
     faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5});
-    faceMesh.onResults(res => {
-        if (res.multiFaceLandmarks.length > 0) {
-            const p = res.multiFaceLandmarks[0];
-            const d = Math.sqrt(Math.pow(p[33].x - p[263].x, 2) + Math.pow(p[33].y - p[263].y, 2));
-            const actualDist = Math.round(16 / d);
+    faceMesh.onResults(results => {
+        if (results.multiFaceLandmarks.length > 0) {
+            const points = results.multiFaceLandmarks[0];
+            const p1 = points[33], p2 = points[263];
+            const dist = Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+            const realDist = Math.round(15 / dist); // 90-100 sm uchun kalibrlash
             
-            document.getElementById('live-dist').innerText = actualDist;
-            distanceBadge.innerText = `Masofa: ${actualDist} sm`;
+            document.getElementById('cur-dist').innerText = realDist;
+            distanceInfo.innerText = `Masofa: ${realDist} sm`;
 
-            if (actualDist >= 90 && actualDist <= 105) {
-                distanceLock.classList.add('hidden');
-                distanceBadge.style.background = '#2ecc71';
+            if (realDist >= 90 && realDist <= 110) {
+                isDistanceOk = true;
+                distWarn.classList.add('hidden');
+                distanceInfo.style.background = 'green';
             } else {
-                distanceLock.classList.remove('hidden');
-                distanceBadge.style.background = '#e74c3c';
+                isDistanceOk = false;
+                distWarn.classList.remove('hidden');
+                distanceInfo.style.background = 'red';
             }
         }
     });
 
-    async function init() {
+    async function start() {
         const stream = await navigator.mediaDevices.getUserMedia({video: true});
         videoElement.srcObject = stream;
-        const cam = new Camera(videoElement, {onFrame: async () => { await faceMesh.send({image: videoElement}); }, width: 640, height: 480});
-        cam.start();
-        runTest();
+        const camera = new Camera(videoElement, {onFrame: async () => { await faceMesh.send({image: videoElement}); }, width: 640, height: 480});
+        camera.start();
+        nextQuestion();
     }
-    init();
+    start();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
 </body>
