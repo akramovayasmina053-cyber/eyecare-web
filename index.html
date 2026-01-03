@@ -3,121 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EyeCare Test</title>
+    <title>EyeCare+ Professional Test</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f4f7f6; margin: 0; padding: 20px; touch-action: manipulation; }
-        .container { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-        #eye-symbol { font-size: 80px; font-weight: bold; margin: 40px 0; color: #333; min-height: 100px; display: flex; align-items: center; justify-content: center; }
-        .options { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        button { padding: 15px; font-size: 18px; border: none; border-radius: 10px; background: #007bff; color: white; cursor: pointer; }
-        button:active { background: #0056b3; }
-        .progress { margin-bottom: 20px; font-size: 14px; color: #666; }
+        :root { --primary: #0088cc; --bg: #f4f7f9; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .card { background: white; border-radius: 20px; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        .progress-bar { height: 6px; background: #e0e0e0; border-radius: 3px; margin-bottom: 20px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: 0.3s; }
+        #symbol-box { height: 150px; display: flex; align-items: center; justify-content: center; margin-bottom: 30px; border: 2px dashed #ddd; border-radius: 15px; }
+        #symbol { font-weight: bold; color: #333; transition: 0.2s; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        button { padding: 18px; font-size: 18px; border: none; border-radius: 12px; background: var(--primary); color: white; cursor: pointer; transition: 0.2s; -webkit-tap-highlight-color: transparent; }
+        button:active { transform: scale(0.96); opacity: 0.9; }
+        .info { font-size: 14px; color: #777; margin-bottom: 10px; }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <div class="progress">Savol: <span id="current-num">1</span> / 9</div>
-    <div id="eye-symbol">...</div>
-    <div class="options" id="options-container">
-        </div>
+<div class="card">
+    <div class="info">Savol: <span id="q-num">1</span>/10</div>
+    <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+    <div id="symbol-box"><div id="symbol">...</div></div>
+    <div class="grid" id="options"></div>
 </div>
 
 <script>
-    const tg = window.Telegram.WebApp;
+    let tg = window.Telegram.WebApp;
     tg.expand();
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const age = urlParams.get('age') || '20';
+    const params = new URLSearchParams(window.location.search);
+    const age = params.get('age') || '20';
 
-    // SAVOLLAR BAZASI
-    const questionsData = {
-        "3": ["🍎", "🐶", "🚗", "🏠", "🌟", "🐱", "🐥", "🌳", "🎈"],
-        "9": ["Ш", "Б", "М", "Н", "К", "Ы", "И", "Ш", "Б"],
-        "20": ["Б", "К", "Ш", "М", "И", "Н", "Ы", "К", "Ш"]
+    const testData = {
+        "3": ["🍎", "🐶", "🚗", "🏠", "🌟", "🐱", "🐥", "🌳", "🎈", "🚲"],
+        "9": ["Ш", "Б", "М", "Н", "К", "Ы", "И", "Ш", "Б", "М"],
+        "20": ["Б", "К", "Ш", "М", "И", "Н", "Ы", "К", "Ш", "Б"]
     };
 
-    // VARIANTLAR (Har bir yosh uchun to'g'ri variantlar chiqishi uchun)
-    const variantsData = {
-        "3": ["🍎", "🐶", "🚗", "🏠", "🌟", "🐱", "🐥", "🌳", "🎈"],
-        "9": ["Ш", "Б", "М", "Н", "К", "Ы", "И", "П", "Л"],
-        "20": ["Б", "К", "Ш", "М", "И", "Н", "Ы", "У", "З"]
-    };
+    let step = 0;
+    let errors = [];
+    let questions = testData[age] || testData["20"];
 
-    let currentStep = 0;
-    let mainResults = [];
-    const ageGroup = questionsData[age] ? age : "20";
-    const questions = questionsData[ageGroup];
-
-    function loadQuestion() {
-        if (currentStep >= questions.length) {
-            finishTest();
-            return;
-        }
-
-        document.getElementById('current-num').innerText = currentStep + 1;
-        const symbolDiv = document.getElementById('eye-symbol');
-        symbolDiv.innerText = questions[currentStep];
-        
-        // Yosh o'tgan sari harf o'lchamini kichiklashtirish (Miopiya/Gipermetropiya testi uchun)
-        let fontSize = 80 - (currentStep * 7); 
-        symbolDiv.style.fontSize = fontSize + "px";
-
-        generateButtons();
+    function update() {
+        if (step >= 10) { finish(); return; }
+        document.getElementById('q-num').innerText = step + 1;
+        document.getElementById('progress').style.width = ((step + 1) * 10) + "%";
+        let s = document.getElementById('symbol');
+        s.innerText = questions[step];
+        let baseSize = age === "3" ? 90 : 80;
+        s.style.fontSize = (baseSize - (step * 7)) + "px";
+        renderButtons();
     }
 
-    function generateButtons() {
-        const container = document.getElementById('options-container');
-        container.innerHTML = "";
-        
-        // To'g'ri javob va 3 ta tasodifiy noto'g'ri javob
-        let correct = questions[currentStep];
-        let pool = variantsData[ageGroup].filter(v => v !== correct);
-        let shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 3);
-        shuffled.push(correct);
-        shuffled.sort(() => 0.5 - Math.random());
-
-        shuffled.forEach(text => {
+    function renderButtons() {
+        const box = document.getElementById('options');
+        box.innerHTML = "";
+        let correct = questions[step];
+        let others = ["O", "X", "P", "L", "K", "M"].filter(x => x !== correct).sort(() => 0.5 - Math.random()).slice(0, 3);
+        let choices = [correct, ...others].sort(() => 0.5 - Math.random());
+        choices.forEach(text => {
             const btn = document.createElement('button');
             btn.innerText = text;
-            btn.onclick = () => handleAnswer(text === correct);
-            container.appendChild(btn);
+            btn.onclick = () => { if (text !== correct) errors.push(step); step++; update(); };
+            box.appendChild(btn);
         });
     }
 
-    function handleAnswer(isCorrect) {
-        mainResults.push(isCorrect);
-        currentStep++;
-        loadQuestion();
-    }
+    function finish() {
+        let diag = "";
+        let earlyErrors = errors.filter(x => x < 5).length;
+        let lateErrors = errors.filter(x => x >= 5).length;
 
-    function finishTest() {
-        let firstHalfErrors = mainResults.slice(0, 4).filter(r => !r).length;
-        let secondHalfErrors = mainResults.slice(5, 9).filter(r => !r).length;
-        
-        let diagnosis = "";
-        let advice = "";
-
-        if (firstHalfErrors >= 2) {
-            diagnosis = "📍 Taxminiy Tashxis: Gipermetropiya (Yaqinni ko'ra olmaslik).";
-            advice = "💊 Tavsiya: 'Sisteyn Ultra' tomchisi. Yaqindan ko'p o'qimang.";
-        } else if (secondHalfErrors >= 2) {
-            diagnosis = "📍 Taxminiy Tashxis: Miopiya (Uzoqni ko'ra olmaslik).";
-            advice = "💊 Tavsiya: 'Taufon' tomchisi. Har 20 daqiqada uzoqqa qarang.";
+        if (earlyErrors >= 2) {
+            diag = "📍 Tashxis: Gipermetropiya (Yaqinni ko'rishda zaiflik).\n💊 Tavsiya: 'Sisteyn' tomchisi.";
+        } else if (lateErrors >= 2) {
+            diag = "📍 Tashxis: Miopiya (Uzoqni ko'rishda zaiflik).\n💊 Tavsiya: 'Taufon' tomchisi.";
         } else {
-            diagnosis = "✅ Natija: Ko'rish qobiliyati normal.";
-            advice = "💊 Tavsiya: Vitamin 'Lutein-Z' profilaktika uchun.";
+            diag = "✅ Natija: Ko'rish qobiliyati normal.\n💊 Tavsiya: Profilaktik mashqlar.";
         }
 
-        const finalMsg = `${diagnosis}\n\n${advice}\n\n🧘 Mashq: 20-20-20 qoidasiga amal qiling.`;
-        
-        tg.sendData(finalMsg);
+        tg.sendData(diag);
         tg.close();
     }
-
-    loadQuestion();
+    update();
 </script>
-
 </body>
 </html>
