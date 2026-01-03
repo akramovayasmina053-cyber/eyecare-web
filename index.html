@@ -3,89 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EyeCare+ Professional Test</title>
+    <title>EyeCare+ Professional Diagnostic</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root { --primary: #0088cc; --bg: #f4f7f9; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .card { background: white; border-radius: 20px; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
-        .progress-bar { height: 6px; background: #e0e0e0; border-radius: 3px; margin-bottom: 20px; overflow: hidden; }
-        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: 0.3s; }
-        #symbol-box { height: 150px; display: flex; align-items: center; justify-content: center; margin-bottom: 30px; border: 2px dashed #ddd; border-radius: 15px; }
-        #symbol { font-weight: bold; color: #333; transition: 0.2s; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        button { padding: 18px; font-size: 18px; border: none; border-radius: 12px; background: var(--primary); color: white; cursor: pointer; transition: 0.2s; -webkit-tap-highlight-color: transparent; }
-        button:active { transform: scale(0.96); opacity: 0.9; }
-        .info { font-size: 14px; color: #777; margin-bottom: 10px; }
+        body { font-family: 'Arial', sans-serif; text-align: center; background: #f0f4f8; margin: 0; padding: 15px; }
+        .test-container { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+        #video-container { position: relative; width: 100%; height: 180px; background: #000; border-radius: 15px; margin-bottom: 20px; overflow: hidden; }
+        video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        #target-area { font-size: 70px; font-weight: bold; margin: 30px 0; min-height: 100px; display: flex; align-items: center; justify-content: center; }
+        .color-circle { width: 120px; height: 120px; border-radius: 50%; margin: auto; border: 5px solid #eee; }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        button { padding: 18px; font-size: 18px; border: none; border-radius: 12px; background: #0088cc; color: white; cursor: pointer; }
+        button:active { transform: scale(0.98); background: #006699; }
+        .step-info { color: #666; font-size: 14px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
-<div class="card">
-    <div class="info">Savol: <span id="q-num">1</span>/10</div>
-    <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
-    <div id="symbol-box"><div id="symbol">...</div></div>
-    <div class="grid" id="options"></div>
+
+<div class="test-container">
+    <div class="step-info">Diagnostika: <span id="step-count">1</span> / 12</div>
+    
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline></video>
+        <div style="position:absolute; bottom:5px; width:100%; color:white; font-size:10px; background:rgba(0,0,0,0.5)">Kamera masofani nazorat qilish uchun</div>
+    </div>
+
+    <div id="target-area">...</div>
+
+    <div class="options-grid" id="buttons-container"></div>
 </div>
 
 <script>
-    let tg = window.Telegram.WebApp;
+    const tg = window.Telegram.WebApp;
     tg.expand();
 
-    const params = new URLSearchParams(window.location.search);
-    const age = params.get('age') || '20';
+    const video = document.getElementById('webcam');
+    const targetArea = document.getElementById('target-area');
+    const btnContainer = document.getElementById('buttons-container');
 
-    const testData = {
-        "3": ["🍎", "🐶", "🚗", "🏠", "🌟", "🐱", "🐥", "🌳", "🎈", "🚲"],
-        "9": ["Ш", "Б", "М", "Н", "К", "Ы", "И", "Ш", "Б", "М"],
-        "20": ["Б", "К", "Ш", "М", "И", "Н", "Ы", "К", "Ш", "Б"]
-    };
+    // Kamerani yoqish
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+        .then(stream => { video.srcObject = stream; })
+        .catch(err => console.log("Kamera ruxsati berilmadi"));
 
-    let step = 0;
-    let errors = [];
-    let questions = testData[age] || testData["20"];
+    const urlParams = new URLSearchParams(window.location.search);
+    const age = urlParams.get('age') || '20';
 
-    function update() {
-        if (step >= 10) { finish(); return; }
-        document.getElementById('q-num').innerText = step + 1;
-        document.getElementById('progress').style.width = ((step + 1) * 10) + "%";
-        let s = document.getElementById('symbol');
-        s.innerText = questions[step];
-        let baseSize = age === "3" ? 90 : 80;
-        s.style.fontSize = (baseSize - (step * 7)) + "px";
-        renderButtons();
-    }
+    // Testlar bazasi (Raqam, Rang, Shakl)
+    const tests = [
+        { type: 'text', val: 'E', options: ['E', 'H', 'B', 'M'] },
+        { type: 'text', val: '8', options: ['8', '3', '0', '6'] },
+        { type: 'color', val: '#FF0000', label: 'Qizil', options: ['Qizil', 'Yashil', 'Ko\'k', 'Sariq'] },
+        { type: 'text', val: 'Ш', options: ['Ш', 'И', 'Н', 'К'] },
+        { type: 'text', val: '5', options: ['5', '2', '6', '9'] },
+        { type: 'color', val: '#00FF00', label: 'Yashil', options: ['Yashil', 'Jigarrang', 'Sariq', 'Qizil'] },
+        { type: 'text', val: 'B', options: ['B', 'D', 'P', 'R'] },
+        { type: 'text', val: '2', options: ['2', '7', 'Z', '5'] },
+        { type: 'color', val: '#0000FF', label: 'Ko\'k', options: ['Ko\'k', 'Siyohrang', 'Yashil', 'Qizil'] },
+        { type: 'text', val: 'M', options: ['M', 'W', 'N', 'H'] },
+        { type: 'text', val: '0', options: ['0', 'O', '8', 'C'] },
+        { type: 'text', val: 'K', options: ['K', 'X', 'Y', 'H'] }
+    ];
 
-    function renderButtons() {
-        const box = document.getElementById('options');
-        box.innerHTML = "";
-        let correct = questions[step];
-        let others = ["O", "X", "P", "L", "K", "M"].filter(x => x !== correct).sort(() => 0.5 - Math.random()).slice(0, 3);
-        let choices = [correct, ...others].sort(() => 0.5 - Math.random());
-        choices.forEach(text => {
+    let currentStep = 0;
+    let score = 0;
+
+    function loadTest() {
+        if (currentStep >= tests.length) {
+            finishTest();
+            return;
+        }
+
+        document.getElementById('step-count').innerText = currentStep + 1;
+        const currentTest = tests[currentStep];
+        targetArea.innerHTML = "";
+        btnContainer.innerHTML = "";
+
+        // Obyektni chiqarish
+        if (currentTest.type === 'text') {
+            targetArea.innerText = currentTest.val;
+            targetArea.style.fontSize = (70 - (currentStep * 4)) + "px"; // Savol o'tgan sari kichrayadi
+        } else if (currentTest.type === 'color') {
+            const circle = document.createElement('div');
+            circle.className = 'color-circle';
+            circle.style.backgroundColor = currentTest.val;
+            targetArea.appendChild(circle);
+        }
+
+        // Tugmalarni chiqarish
+        currentTest.options.forEach(opt => {
             const btn = document.createElement('button');
-            btn.innerText = text;
-            btn.onclick = () => { if (text !== correct) errors.push(step); step++; update(); };
-            box.appendChild(btn);
+            btn.innerText = opt;
+            btn.onclick = () => checkAnswer(opt);
+            btnContainer.appendChild(btn);
         });
     }
 
-    function finish() {
-        let diag = "";
-        let earlyErrors = errors.filter(x => x < 5).length;
-        let lateErrors = errors.filter(x => x >= 5).length;
+    function checkAnswer(answer) {
+        const current = tests[currentStep];
+        const correctVal = current.type === 'color' ? current.label : current.val;
+        
+        if (answer === correctVal) score++;
+        currentStep++;
+        loadTest();
+    }
 
-        if (earlyErrors >= 2) {
-            diag = "📍 Tashxis: Gipermetropiya (Yaqinni ko'rishda zaiflik).\n💊 Tavsiya: 'Sisteyn' tomchisi.";
-        } else if (lateErrors >= 2) {
-            diag = "📍 Tashxis: Miopiya (Uzoqni ko'rishda zaiflik).\n💊 Tavsiya: 'Taufon' tomchisi.";
-        } else {
-            diag = "✅ Natija: Ko'rish qobiliyati normal.\n💊 Tavsiya: Profilaktik mashqlar.";
-        }
+    function finishTest() {
+        let resultMsg = "";
+        if (score >= 10) resultMsg = "✅ Natija: Ko'rish qobiliyati a'lo. Daltonizm belgilari yo'q.";
+        else if (score >= 7) resultMsg = "⚠️ Natija: Ko'rishda biroz zo'riqish bor. Profilaktika tavsiya etiladi.";
+        else resultMsg = "📍 Natija: Ko'rish zaiflashgan. Mutaxassis ko'rigidan o'tishingiz shart.";
 
-        tg.sendData(diag);
+        tg.sendData(resultMsg);
         tg.close();
     }
-    update();
+
+    loadTest();
 </script>
 </body>
 </html>
