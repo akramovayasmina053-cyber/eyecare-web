@@ -2,123 +2,170 @@
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EyeCare+ Professional Diagnostic</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EyeCare+ Pro Test</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <style>
-        body { font-family: 'Arial', sans-serif; text-align: center; background: #f0f4f8; margin: 0; padding: 15px; }
-        .test-container { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
-        #video-container { position: relative; width: 100%; height: 180px; background: #000; border-radius: 15px; margin-bottom: 20px; overflow: hidden; }
-        video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        #target-area { font-size: 70px; font-weight: bold; margin: 30px 0; min-height: 100px; display: flex; align-items: center; justify-content: center; }
-        .color-circle { width: 120px; height: 120px; border-radius: 50%; margin: auto; border: 5px solid #eee; }
-        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        button { padding: 18px; font-size: 18px; border: none; border-radius: 12px; background: #0088cc; color: white; cursor: pointer; }
-        button:active { transform: scale(0.98); background: #006699; }
-        .step-info { color: #666; font-size: 14px; margin-bottom: 10px; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; text-align: center; background: #f0f2f5; color: #333; }
+        #camera-container { position: relative; width: 100%; height: 160px; background: #000; }
+        video { width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
+        #distance-badge { position: absolute; top: 10px; right: 10px; padding: 5px 15px; border-radius: 20px; color: white; font-weight: bold; font-size: 14px; }
+        .test-box { padding: 20px; height: 300px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #display-element { font-weight: bold; line-height: 1; transition: all 0.2s; margin-bottom: 40px; }
+        .options-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 90%; max-width: 350px; }
+        .btn-opt { padding: 16px; font-size: 18px; border: 2px solid #ddd; background: white; border-radius: 12px; cursor: pointer; transition: 0.2s; font-weight: 600; }
+        .btn-opt:active { transform: scale(0.95); background: #f8f8f8; }
+        .lock-screen { position: fixed; top: 160px; left: 0; right: 0; bottom: 0; background: rgba(240,242,245,0.98); z-index: 1000; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 30px; }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
-
-<div class="test-container">
-    <div class="step-info">Diagnostika: <span id="step-count">1</span> / 12</div>
-    
-    <div id="video-container">
+    <div id="camera-container">
         <video id="webcam" autoplay playsinline></video>
-        <div style="position:absolute; bottom:5px; width:100%; color:white; font-size:10px; background:rgba(0,0,0,0.5)">Kamera masofani nazorat qilish uchun</div>
+        <div id="distance-badge" style="background: red;">Masofa: 0 sm</div>
     </div>
 
-    <div id="target-area">...</div>
+    <div id="distance-lock" class="lock-screen">
+        <h2 style="color: #e74c3c;">Masofani to'g'rilang!</h2>
+        <p>Iltimos, telefonni yuzingizdan <b>90-100 sm</b> uzoqlikda tuting.</p>
+        <p>Hozirgi masofa: <span id="live-dist">0</span> sm</p>
+    </div>
 
-    <div class="options-grid" id="buttons-container"></div>
-</div>
+    <div class="test-box">
+        <div id="display-element">...</div>
+        <div class="options-container" id="options-grid"></div>
+    </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    const video = document.getElementById('webcam');
-    const targetArea = document.getElementById('target-area');
-    const btnContainer = document.getElementById('buttons-container');
-
-    // Kamerani yoqish
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-        .then(stream => { video.srcObject = stream; })
-        .catch(err => console.log("Kamera ruxsati berilmadi"));
-
+    const videoElement = document.getElementById('webcam');
+    const distanceBadge = document.getElementById('distance-badge');
+    const distanceLock = document.getElementById('distance-lock');
+    const displayElement = document.getElementById('display-element');
+    const optionsGrid = document.getElementById('options-grid');
+    
     const urlParams = new URLSearchParams(window.location.search);
-    const age = urlParams.get('age') || '20';
+    const age = parseInt(urlParams.get('age')) || 20;
 
-    // Testlar bazasi (Raqam, Rang, Shakl)
-    const tests = [
-        { type: 'text', val: 'E', options: ['E', 'H', 'B', 'M'] },
-        { type: 'text', val: '8', options: ['8', '3', '0', '6'] },
-        { type: 'color', val: '#FF0000', label: 'Qizil', options: ['Qizil', 'Yashil', 'Ko\'k', 'Sariq'] },
-        { type: 'text', val: 'Ш', options: ['Ш', 'И', 'Н', 'К'] },
-        { type: 'text', val: '5', options: ['5', '2', '6', '9'] },
-        { type: 'color', val: '#00FF00', label: 'Yashil', options: ['Yashil', 'Jigarrang', 'Sariq', 'Qizil'] },
-        { type: 'text', val: 'B', options: ['B', 'D', 'P', 'R'] },
-        { type: 'text', val: '2', options: ['2', '7', 'Z', '5'] },
-        { type: 'color', val: '#0000FF', label: 'Ko\'k', options: ['Ko\'k', 'Siyohrang', 'Yashil', 'Qizil'] },
-        { type: 'text', val: 'M', options: ['M', 'W', 'N', 'H'] },
-        { type: 'text', val: '0', options: ['0', 'O', '8', 'C'] },
-        { type: 'text', val: 'K', options: ['K', 'X', 'Y', 'H'] }
-    ];
+    let step = 0;
+    let correctCount = 0;
+    let testType = age < 9 ? 'kids' : (age < 15 ? 'teens' : 'adults');
 
-    let currentStep = 0;
-    let score = 0;
+    // O'xshash belgilar guruhlari (Chalg'itish uchun)
+    const similarGroups = {
+        adults: ['174', '568', '382', '906', '423', '086', '532'],
+        teens: ['ШЩП', 'БМН', 'КНИ', 'ЛИА', 'ОСЗ', 'ЕЁЭ'],
+        kids: ['🐶🐱🐭', '🍎🍒🍓', '🏠🏢🏥', '🚗🚕🚌', '☀️⭐🌙'],
+        colors: ['Qizil', 'Yashil', 'Ko\'k', 'Sariq', 'Olovrang', 'Siyohrang']
+    };
 
-    function loadTest() {
-        if (currentStep >= tests.length) {
-            finishTest();
-            return;
-        }
+    const visionLevels = [0.5, 0.4, 0.35, 0.3, 0.25, 0.2, 0.18, 0.15, 0.12];
 
-        document.getElementById('step-count').innerText = currentStep + 1;
-        const currentTest = tests[currentStep];
-        targetArea.innerHTML = "";
-        btnContainer.innerHTML = "";
-
-        // Obyektni chiqarish
-        if (currentTest.type === 'text') {
-            targetArea.innerText = currentTest.val;
-            targetArea.style.fontSize = (70 - (currentStep * 4)) + "px"; // Savol o'tgan sari kichrayadi
-        } else if (currentTest.type === 'color') {
-            const circle = document.createElement('div');
-            circle.className = 'color-circle';
-            circle.style.backgroundColor = currentTest.val;
-            targetArea.appendChild(circle);
-        }
-
-        // Tugmalarni chiqarish
-        currentTest.options.forEach(opt => {
-            const btn = document.createElement('button');
-            btn.innerText = opt;
-            btn.onclick = () => checkAnswer(opt);
-            btnContainer.appendChild(btn);
-        });
-    }
-
-    function checkAnswer(answer) {
-        const current = tests[currentStep];
-        const correctVal = current.type === 'color' ? current.label : current.val;
+    function getOptions(correct, type) {
+        let opts = [correct];
+        let pool = [];
         
-        if (answer === correctVal) score++;
-        currentStep++;
-        loadTest();
+        if(type === 'colors') pool = similarGroups.colors;
+        else {
+            const group = Object.values(similarGroups[testType]).find(g => g.includes(correct[0] || correct));
+            pool = group ? group.split('') : (testType === 'adults' ? '0123456789'.split('') : 'ШБМНКЫИП'.split(''));
+        }
+
+        while(opts.length < 4) {
+            let rand = pool[Math.floor(Math.random() * pool.length)];
+            if(!opts.includes(rand)) opts.push(rand);
+        }
+        return opts.sort(() => Math.random() - 0.5);
     }
 
-    function finishTest() {
-        let resultMsg = "";
-        if (score >= 10) resultMsg = "✅ Natija: Ko'rish qobiliyati a'lo. Daltonizm belgilari yo'q.";
-        else if (score >= 7) resultMsg = "⚠️ Natija: Ko'rishda biroz zo'riqish bor. Profilaktika tavsiya etiladi.";
-        else resultMsg = "📍 Natija: Ko'rish zaiflashgan. Mutaxassis ko'rigidan o'tishingiz shart.";
+    function runTest() {
+        if(step >= 12) return finish();
 
-        tg.sendData(resultMsg);
+        optionsGrid.innerHTML = '';
+        let isColorTest = step >= 9;
+
+        if(!isColorTest) {
+            let scale = visionLevels[step];
+            displayElement.style.fontSize = (scale * 200) + "px";
+            displayElement.style.color = "black";
+            
+            let charPool = testType === 'adults' ? "0123456789" : (testType === 'teens' ? "ШБМНКЫИП" : "🐶🍎🏠☀️🎈");
+            let target = charPool[Math.floor(Math.random() * charPool.length)];
+            displayElement.innerText = target;
+
+            getOptions(target, 'chars').forEach(o => createBtn(o, target));
+        } else {
+            displayElement.style.fontSize = "60px";
+            displayElement.innerText = "●";
+            let colors = [
+                {n:'Qizil', c:'#e74c3c'}, {n:'Yashil', c:'#2ecc71'}, 
+                {n:'Ko\'k', c:'#3498db'}, {n:'Sariq', c:'#f1c40f'}
+            ];
+            let targetColor = colors[Math.floor(Math.random() * colors.length)];
+            displayElement.style.color = targetColor.c;
+
+            getOptions(targetColor.n, 'colors').forEach(o => createBtn(o, targetColor.n));
+        }
+    }
+
+    function createBtn(txt, cor) {
+        const b = document.createElement('button');
+        b.className = 'btn-opt';
+        b.innerText = txt;
+        b.onclick = () => {
+            if(txt === cor) correctCount++;
+            step++;
+            runTest();
+        };
+        optionsGrid.appendChild(b);
+    }
+
+    function finish() {
+        let res = (correctCount / 12) * 1.0;
+        let msg = "";
+        if(res >= 0.9) msg = "Ko'rish o'tkirligi a'lo (1.0). Ko'zlaringiz sog'lom!";
+        else if(res >= 0.6) msg = "Sizda ko'z zo'riqishi (Miopiya boshlanishi) bo'lishi mumkin. 'Sisteyn' tomchisi va 20-20-20 mashqi tavsiya etiladi.";
+        else msg = "Diqqat! Ko'rish pasaygan. Oftalmolog ko'rigi zarur. 'Taufon' tomchisi va maxsus mashqlar qiling.";
+        
+        tg.sendData(`📊 Natija: ${res.toFixed(2)} | Tashxis: ${msg}`);
         tg.close();
     }
 
-    loadTest();
+    // Kamera va Masofa (Mediapipe)
+    const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+    faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5});
+    faceMesh.onResults(res => {
+        if (res.multiFaceLandmarks.length > 0) {
+            const p = res.multiFaceLandmarks[0];
+            const d = Math.sqrt(Math.pow(p[33].x - p[263].x, 2) + Math.pow(p[33].y - p[263].y, 2));
+            const actualDist = Math.round(16 / d);
+            
+            document.getElementById('live-dist').innerText = actualDist;
+            distanceBadge.innerText = `Masofa: ${actualDist} sm`;
+
+            if (actualDist >= 90 && actualDist <= 105) {
+                distanceLock.classList.add('hidden');
+                distanceBadge.style.background = '#2ecc71';
+            } else {
+                distanceLock.classList.remove('hidden');
+                distanceBadge.style.background = '#e74c3c';
+            }
+        }
+    });
+
+    async function init() {
+        const stream = await navigator.mediaDevices.getUserMedia({video: true});
+        videoElement.srcObject = stream;
+        const cam = new Camera(videoElement, {onFrame: async () => { await faceMesh.send({image: videoElement}); }, width: 640, height: 480});
+        cam.start();
+        runTest();
+    }
+    init();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
 </body>
 </html>
