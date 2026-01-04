@@ -3,35 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EyeCare+ AI Diagnostic</title>
+    <title>EyeCare+ Professional Test</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body { font-family: sans-serif; text-align: center; background: #f0f2f5; margin: 0; overflow: hidden; }
         #main-ui { transition: filter 0.3s; padding: 15px; }
         .blur { filter: blur(20px); pointer-events: none; }
         #warning { 
-            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(231, 76, 60, 0.95); color: white; padding: 25px;
-            border-radius: 20px; display: none; z-index: 1000; width: 80%; font-weight: bold;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(231, 76, 60, 0.9); color: white; display: none; 
+            align-items: center; justify-content: center; z-index: 1000; font-size: 22px; font-weight: bold;
         }
-        #cam-container { width: 100%; height: 140px; background: #000; border-radius: 15px; overflow: hidden; border: 3px solid #0088cc; }
+        #cam-container { width: 100%; height: 140px; background: #000; border-radius: 15px; overflow: hidden; border: 3px solid #0088cc; margin-bottom: 10px; }
         video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        #display-box { height: 180px; display: flex; align-items: center; justify-content: center; background: white; border-radius: 15px; margin: 15px 0; font-weight: bold; }
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        button { padding: 20px; font-size: 20px; border: none; border-radius: 12px; background: #0088cc; color: white; cursor: pointer; }
+        #display-box { height: 180px; display: flex; align-items: center; justify-content: center; background: white; border-radius: 15px; margin: 15px 0; border: 1px solid #ddd; }
+        #symbol { font-weight: bold; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 18px; font-size: 20px; border: none; border-radius: 12px; background: #0088cc; color: white; cursor: pointer; }
     </style>
 </head>
 <body>
-
-<div id="warning">⚠️ MASOFA JUDA YAQIN!<br>Iltimos, telefonni 90-100 sm uzoqlikda tuting.</div>
-
-<div id="main-ui">
-    <div id="cam-container">
-        <video id="v" autoplay playsinline></video>
+    <div id="warning">⚠️ MASOFA NOTOG'RI!<br>Iltimos, 90-100 sm masofani saqlang.</div>
+    <div id="main-ui">
+        <div id="cam-container"><video id="v" autoplay playsinline></video></div>
+        <div id="display-box"><div id="symbol">...</div></div>
+        <div class="grid" id="btns"></div>
     </div>
-    <div id="display-box"><div id="symbol">...</div></div>
-    <div class="btn-grid" id="btns"></div>
-</div>
 
 <script>
     const tg = window.Telegram.WebApp;
@@ -41,82 +38,70 @@
     const warning = document.getElementById('warning');
     const mainUi = document.getElementById('main-ui');
 
-    // Kamera va Masofa nazorati simulyatsiyasi
+    // Kamera va Masofa nazorati (Face detection simulyatsiyasi)
     navigator.mediaDevices.getUserMedia({video: {facingMode:"user"}}).then(s => {
         video.srcObject = s;
-        // Yuz o'lchamini tekshirish (Masofa nazorati)
         setInterval(() => {
-            // Haqiqiy hayotda yuz piksellarini o'lchaydi, bu yerda simulyatsiya
-            // Agar yuz juda yaqin bo'lsa:
-            // showWarning(true);
-        }, 1000);
+            // Real vaqtda yuz hajmini tekshirish (piksellarda simulyatsiya)
+            // Agar yuz hajmi kadrning 40% dan ko'pini egallasa - yaqin
+            let isTooNear = false; 
+            // Bu yerda mantiqiy tekshiruv bo'ladi
+            // warning.style.display = isTooNear ? 'flex' : 'none';
+            // mainUi.className = isTooNear ? 'blur' : '';
+        }, 500);
     });
 
-    function showWarning(isNear) {
-        warning.style.display = isNear ? 'block' : 'none';
-        mainUi.className = isNear ? 'blur' : '';
-    }
-
     const params = new URLSearchParams(window.location.search);
-    const age = params.get('age') || '20';
-    const mode = params.get('mode') || 'normal';
+    const age = params.get('age');
+    const isColor = params.get('mode') === 'color';
 
-    // Savollar bazasi
-    const library = {
-        shapes: ['🍎', '🚗', '🐶', '🏠', '🌟', '🐱', '🐥', '🌳'],
-        letters: ['Ш', 'Б', 'М', 'Н', 'К', 'Ы', 'И'],
-        numbers: ['1', '2', '3', '5', '6', '8', '9', '0'],
-        colors: ['#e74c3c', '#2ecc71', '#3498db', '#f1c40f']
+    const lib = {
+        shapes: ['🍎', '🐶', '🏠', '🌟', '🚗', '🐥', '🌳', '🎁', '🐱'],
+        letters: ['Ш', 'Б', 'М', 'Н', 'К', 'И', 'Ы', 'В', 'Д'],
+        numbers: ['8', '5', '2', '0', '6', '9', '3', '7', '4'],
+        colors: ['#e74c3c', '#2ecc71', '#3498db', '#f1c40f', '#9b59b6', '#34495e']
     };
 
-    let step = 0;
-    let score = 0;
-
-    function generateStep() {
-        if(step >= 10) {
-            tg.sendData(mode === 'color' ? "Rang testi tugadi" : "FINISH");
-            tg.close();
-            return;
-        }
-
-        const display = document.getElementById('symbol');
+    let step = 0; let errors = [];
+    function render() {
         const btns = document.getElementById('btns');
+        const sym = document.getElementById('symbol');
         btns.innerHTML = "";
 
-        let currentType;
-        if (mode === 'color') currentType = library.colors;
-        else if (age === '3') currentType = library.shapes;
-        else if (step < 5) currentType = library.letters;
-        else currentType = library.numbers;
+        let pool, max;
+        if(isColor) { pool = lib.colors; max = 6; }
+        else if(age === '3') { pool = lib.shapes; max = 9; }
+        else { max = 18; pool = (step < 9) ? lib.letters : lib.numbers; }
 
-        // Tasodifiy tanlash (Yodlab qolmaslik uchun)
-        const correct = currentType[Math.floor(Math.random() * currentType.length)];
-        
-        if (mode === 'color') {
-            display.innerHTML = `<div style="width:100px; height:100px; border-radius:50%; background:${correct}"></div>`;
-        } else {
-            display.innerText = correct;
-            display.style.fontSize = (100 - (step * 9)) + "px"; // Kichrayish effekti
+        if(step >= max) {
+            tg.sendData(JSON.stringify({type: isColor?'color':'main', errors: errors}));
+            tg.close(); return;
         }
 
-        // Tasodifiy variantlar
+        const correct = pool[Math.floor(Math.random() * pool.length)];
+        if(isColor) {
+            sym.innerHTML = `<div style="width:100px;height:100px;background:${correct};border-radius:50%"></div>`;
+            sym.style.fontSize = "0.4in";
+        } else {
+            sym.innerText = correct;
+            let size = 0.3 - ((step % 9) * 0.023); // 0.3 dan 0.11 gacha kichrayish
+            sym.style.fontSize = size + "in";
+        }
+
         let opts = [correct];
         while(opts.length < 4) {
-            let r = currentType[Math.floor(Math.random() * currentType.length)];
+            let r = pool[Math.floor(Math.random() * pool.length)];
             if(!opts.includes(r)) opts.push(r);
         }
-        opts.sort(() => Math.random() - 0.5);
-
-        opts.forEach(o => {
+        opts.sort(()=>Math.random()-0.5).forEach(o => {
             const b = document.createElement('button');
-            b.innerText = (mode === 'color') ? "Tanlash" : o;
-            if(mode === 'color') b.style.background = o;
-            b.onclick = () => { if(o === correct) score++; step++; generateStep(); };
+            b.innerText = isColor ? "Tanlash" : o;
+            if(isColor) b.style.background = o;
+            b.onclick = () => { if(o !== correct) errors.push(step); step++; render(); };
             btns.appendChild(b);
         });
     }
-
-    generateStep();
+    render();
 </script>
 </body>
 </html>
