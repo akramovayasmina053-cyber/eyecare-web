@@ -216,7 +216,6 @@
         document.getElementById('step-info').classList.add('hidden');
         document.getElementById('result-screen').classList.remove('hidden');
         
-        // Telegram MainButton sozlash
         tg.MainButton.setText("Natijalarni Botga yuborish");
         tg.MainButton.show();
         tg.MainButton.onClick(() => {
@@ -228,8 +227,8 @@
         let diagnosis = "";
         let meds = "";
         let exercise = "1. 20-20-20 qoidasi\n2. Ko'z aylantirish\n3. Fokusni yaqin-uzoqqa almashtirish";
+        let colorResult = "Test qilinmadi";
 
-        // Xatolarni kodingizdagi o'zgaruvchilarga moslash
         let nearErrors = errors.near;
         let farErrors = errors.far;
         let colorErrors = errors.color;
@@ -249,14 +248,13 @@
             meds = "Profilaktika uchun namlovchi tomchilar.";
         }
 
-        // --- RANG TESTI ---
-        let colorResult = "";
-        if (!colorTested || testSequence[0] !== 'colors') {
-            colorResult = "Siz rang ajratish testini o'tkazmadingiz.";
-        } else {
+        // --- RANG TESTI (Xavfsiz tekshiruv) ---
+        if (colorTested && testSequence[0] === 'colors') {
             if (colorErrors <= 1) colorResult = "Normal.";
             else if (colorErrors === 2) colorResult = "Rang ajratish qobiliyati pasayishni boshlagan.";
             else colorResult = "Daltonizm ehtimoli mavjud. Shifokorga murojaat qiling.";
+        } else {
+            colorResult = "Siz rang ajratish testini o'tkazmadingiz.";
         }
 
         const finalData = {
@@ -266,8 +264,13 @@
             exercise: exercise
         };
 
-        tg.sendData(JSON.stringify(finalData));
-        tg.close();
+        try {
+            tg.sendData(JSON.stringify(finalData));
+            tg.close();
+        } catch (e) {
+            console.error("Telegramga yuborishda xato:", e);
+            alert("Natijani yuborib bo'lmadi.");
+        }
     }
 </script>
 </body>
