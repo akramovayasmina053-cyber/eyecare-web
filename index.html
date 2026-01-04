@@ -22,6 +22,7 @@
         #warning-overlay { position: absolute; inset: 0; background: rgba(255,255,255,0.97); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 30px; }
         #step-info { position: absolute; top: 10px; left: 20px; color: #666; font-weight: 500; }
         .hidden { display: none !important; }
+        #result-screen { text-align: center; padding: 20px; }
     </style>
 </head>
 <body>
@@ -43,6 +44,11 @@
 
     <div id="display-element" class="hidden"></div>
     <div id="options" class="options-grid"></div>
+    
+    <div id="result-screen" class="hidden">
+        <h2>Test yakunlandi!</h2>
+        <p>Natijalarni olish uchun pastdagi tugmani bosing.</p>
+    </div>
 </div>
 
 <script>
@@ -57,7 +63,6 @@
         colors: ['#E63946', '#F1FAEE', '#A8DADC', '#457B9D', '#1D3557', '#FFB703', '#FB8500']
     };
 
-    // Test parametrlari
     let testSequence = (age <= 8) ? ['kids'] : ['letters', 'numbers'];
     let currentModeIdx = 0;
     let step = 0;
@@ -65,7 +70,6 @@
     let errors = { near: 0, far: 0, color: 0 };
     let colorTested = false;
 
-    // Masofa nazorati (Mediapipe)
     async function startExperience() {
         document.getElementById('start-btn').innerText = "Yuklanmoqda...";
         try {
@@ -89,18 +93,18 @@
             if (results.multiFaceLandmarks && results.multiFaceLandmarks[0]) {
                 const p = results.multiFaceLandmarks[0];
                 const d = Math.sqrt(Math.pow(p[33].x - p[263].x, 2) + Math.pow(p[33].y - p[263].y, 2));
-                const cm = Math.round(18 / d); // 1 metr uchun kalibrlash
+                const cm = Math.round(18 / d);
                 
                 badge.innerText = `Masofa: ~${cm} sm`;
                 liveDist.innerText = `${cm} sm`;
 
-                if (cm >= 90 && cm <= 110) {
+                if (cm >= 85 && cm <= 115) {
                     overlay.classList.add('hidden');
+                    if (!document.getElementById('result-screen').classList.contains('hidden')) return;
                     document.getElementById('display-element').classList.remove('hidden');
                 } else {
                     overlay.classList.remove('hidden');
                     document.getElementById('status-title').innerText = "Masofani to'g'rilang!";
-                    document.getElementById('status-desc').innerText = "Iltimos, 90-110 sm masofada turing.";
                     document.getElementById('start-btn').classList.add('hidden');
                 }
             }
@@ -127,9 +131,7 @@
         optionsDiv.innerHTML = '';
         const pool = assets[mode];
         
-        // Kattalik mantiqi: 0.3 dan 0.11 gacha kichrayish (Harf/Raqam/Shakl uchun)
         const sizeMap = [0.3, 0.27, 0.24, 0.21, 0.18, 0.16, 0.14, 0.12, 0.11];
-        // Ranglar uchun: 0.4 dan 0.8 gacha (pixelga o'tkazilgan)
         const colorSizeMap = [140, 120, 100, 80, 60, 40];
 
         let target = pool[Math.floor(Math.random() * pool.length)];
@@ -145,7 +147,6 @@
         
         stepInfo.innerText = `${mode === 'kids' ? 'Bolalar testi' : (mode === 'colors' ? 'Rang testi' : 'Asosiy test')}: ${step + 1}/${mode === 'colors' ? 6 : 9}`;
 
-        // Variantlarni yaratish
         let opts = [target];
         while(opts.length < 4) {
             let r = pool[Math.floor(Math.random() * pool.length)];
@@ -182,7 +183,7 @@
             } else if(!colorTested) {
                 askColorPreference();
             } else {
-                finish();
+                showFinalStep();
             }
         } else {
             renderStep();
@@ -197,7 +198,7 @@
         optionsDiv.innerHTML = `
             <p style="grid-column: span 2; text-align:center">Daltonizm (rang ajratish) testini topshirasizmi?</p>
             <button class="btn btn-primary" onclick="startColorTest()">Ha, xohlayman</button>
-            <button class="btn" onclick="finish()">Yo'q, xohlamayman</button>
+            <button class="btn" onclick="showFinalStep()">Yo'q, xohlamayman</button>
         `;
     }
 
@@ -206,38 +207,66 @@
         currentModeIdx = 0;
         step = 0;
         renderStep();
+        document.getElementById('display-element').classList.remove('hidden');
     }
 
-    function finish() {
-        let diagnosis = "✅ Ko'rish qobiliyati normal.";
-        let recommendation = "Koz nuringiz yaxshi. Profilaktika uchun ko'z mashqlarini bajaring.";
-        let meds = "Tavsiya: Retsepsiz dori shart emas.";
+    function showFinalStep() {
+        document.getElementById('display-element').classList.add('hidden');
+        document.getElementById('options').classList.add('hidden');
+        document.getElementById('step-info').classList.add('hidden');
+        document.getElementById('result-screen').classList.remove('hidden');
+        
+        // Telegram MainButton sozlash
+        tg.MainButton.setText("Natijalarni Botga yuborish");
+        tg.MainButton.show();
+        tg.MainButton.onClick(() => {
+            calculateResults();
+        });
+    }
 
-        if (errors.near >= 2) {
-            diagnosis = "🔍 Yaqinni ko'rolmaslik (Gipermetropiya) alomatlari.";
-            meds = "💧 Sisteyn Ultra (tomchi): kunda 2 mahal 1 tomchidan (ko'z toliqishini oladi).";
-        } else if (errors.far >= 3) {
-            diagnosis = "🔍 Uzoqni ko'rolmaslik (Miopiya) alomatlari.";
-            meds = "💊 Viziomaks vitamini: kunda 1 mahal 1 tabletkadan (30 kun).";
+    function calculateResults() {
+        let diagnosis = "";
+        let meds = "";
+        let exercise = "1. 20-20-20 qoidasi\n2. Ko'z aylantirish\n3. Fokusni yaqin-uzoqqa almashtirish";
+
+        // Xatolarni kodingizdagi o'zgaruvchilarga moslash
+        let nearErrors = errors.near;
+        let farErrors = errors.far;
+        let colorErrors = errors.color;
+
+        // --- TASHXIS MANTIG'I ---
+        if (nearErrors >= 2 && farErrors >= 2) {
+            diagnosis = "Umumiy ko'z zo'riqishi yoki aralash refraksiya muammosi.";
+            meds = "Sun’iy ko‘z yoshi (2 mahal), Vitamin A + Lutein (1 mahal).";
+        } else if (nearErrors >= 2) {
+            diagnosis = "Yaqinni ko'rishda muammo (presbiopiya yoki zo'riqish).";
+            meds = "Sun’iy ko‘z yoshi (Kuniga 2 mahal).";
+        } else if (farErrors >= 2) {
+            diagnosis = "Uzoqni ko'rmaslik (boshlang'ich miopiya).";
+            meds = "Vitamin A + Lutein komplekslari.";
+        } else {
+            diagnosis = "Ko'rish qobiliyati normal. Hammasi joyida!";
+            meds = "Profilaktika uchun namlovchi tomchilar.";
         }
 
-        let daltonizm = "⚪ Rang testi ishlanmadi.";
-        if(colorTested && testSequence[0] === 'colors') {
-            if(errors.color >= 3) daltonizm = "⚠️ Sizda Daltonizm kasalligi bo'lishi mumkin. Iltimos, shifokorga murojaat qiling!";
-            else if(errors.color >= 2) daltonizm = "🟡 Rang ajratishda nuqsonlar boshlanmoqda. E'tiborli bo'ling.";
-            else daltonizm = "✅ Rang ajratish qobiliyati normal.";
+        // --- RANG TESTI ---
+        let colorResult = "";
+        if (!colorTested || testSequence[0] !== 'colors') {
+            colorResult = "Siz rang ajratish testini o'tkazmadingiz.";
+        } else {
+            if (colorErrors <= 1) colorResult = "Normal.";
+            else if (colorErrors === 2) colorResult = "Rang ajratish qobiliyati pasayishni boshlagan.";
+            else colorResult = "Daltonizm ehtimoli mavjud. Shifokorga murojaat qiling.";
         }
 
-        const resultData = {
+        const finalData = {
             diag: diagnosis,
+            color_res: colorResult,
             meds: meds,
-            color_res: daltonizm,
-            near_err: errors.near,
-            far_err: errors.far,
-            exercise: "Mashq: '20-20-20' qoidasi — Har 20 daqiqada 20 metr uzoqlikka 20 soniya davomida qarang."
+            exercise: exercise
         };
 
-        tg.sendData(JSON.stringify(resultData));
+        tg.sendData(JSON.stringify(finalData));
         tg.close();
     }
 </script>
