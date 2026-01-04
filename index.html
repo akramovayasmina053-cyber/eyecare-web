@@ -3,40 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EyeCare+ Pro System</title>
+    <title>EyeCare+ AI Diagnostic</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f0f4f8; margin: 0; padding: 15px; overflow: hidden; }
-        .blur-container { transition: filter 0.3s; }
-        .is-blurred { filter: blur(20px); pointer-events: none; }
-        
-        #cam-container { width: 100%; height: 140px; background: #000; border-radius: 15px; overflow: hidden; position: relative; border: 3px solid #0088cc; margin-bottom: 10px; }
-        video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        
-        #dist-warning { 
+        body { font-family: sans-serif; text-align: center; background: #f0f2f5; margin: 0; overflow: hidden; }
+        #main-ui { transition: filter 0.3s; padding: 15px; }
+        .blur { filter: blur(20px); pointer-events: none; }
+        #warning { 
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(255, 0, 0, 0.9); color: white; padding: 25px;
-            border-radius: 20px; display: none; z-index: 1000; font-weight: bold; width: 80%;
+            background: rgba(231, 76, 60, 0.95); color: white; padding: 25px;
+            border-radius: 20px; display: none; z-index: 1000; width: 80%; font-weight: bold;
         }
-
-        #display-box { height: 180px; display: flex; align-items: center; justify-content: center; background: white; border-radius: 15px; margin: 15px 0; border: 1px solid #ddd; }
-        #symbol { font-weight: bold; transition: 0.3s; }
-        .options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        button { padding: 20px; font-size: 20px; border: none; border-radius: 15px; background: #0088cc; color: white; cursor: pointer; }
-        .status-bar { font-size: 14px; color: #666; margin-bottom: 5px; }
+        #cam-container { width: 100%; height: 140px; background: #000; border-radius: 15px; overflow: hidden; border: 3px solid #0088cc; }
+        video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        #display-box { height: 180px; display: flex; align-items: center; justify-content: center; background: white; border-radius: 15px; margin: 15px 0; font-weight: bold; }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 20px; font-size: 20px; border: none; border-radius: 12px; background: #0088cc; color: white; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div id="dist-warning">⚠️ MASOFA JUDA YAQIN!<br>Iltimos, telefonni 90-100 sm masofada tuting.</div>
+<div id="warning">⚠️ MASOFA JUDA YAQIN!<br>Iltimos, telefonni 90-100 sm uzoqlikda tuting.</div>
 
-<div class="blur-container" id="main-ui">
-    <div class="status-bar" id="stage-info">1-Bosqich: Belgilar</div>
+<div id="main-ui">
     <div id="cam-container">
         <video id="v" autoplay playsinline></video>
     </div>
     <div id="display-box"><div id="symbol">...</div></div>
-    <div class="options" id="btns"></div>
+    <div class="btn-grid" id="btns"></div>
 </div>
 
 <script>
@@ -44,80 +38,85 @@
     tg.expand();
 
     const video = document.getElementById('v');
-    const warning = document.getElementById('dist-warning');
+    const warning = document.getElementById('warning');
     const mainUi = document.getElementById('main-ui');
 
-    // Kamera va Masofa nazorati (Yuz hajmi orqali)
+    // Kamera va Masofa nazorati simulyatsiyasi
     navigator.mediaDevices.getUserMedia({video: {facingMode:"user"}}).then(s => {
         video.srcObject = s;
-        setInterval(analyzeDistance, 400);
+        // Yuz o'lchamini tekshirish (Masofa nazorati)
+        setInterval(() => {
+            // Haqiqiy hayotda yuz piksellarini o'lchaydi, bu yerda simulyatsiya
+            // Agar yuz juda yaqin bo'lsa:
+            // showWarning(true);
+        }, 1000);
     });
 
-    function analyzeDistance() {
-        // Yuz piksellarini taxminiy hisoblash (Murakkab kutubxonasiz simulyatsiya)
-        // Agar yuz maydoni kameraning 50% dan ko'pini egallasa - blur yoqiladi
-        const isTooClose = false; // Bu yerda mantiqiy tekshiruv bo'ladi
-        if(isTooClose) {
-            warning.style.display = 'block';
-            mainUi.classList.add('is-blurred');
-        } else {
-            warning.style.display = 'none';
-            mainUi.classList.remove('is-blurred');
-        }
+    function showWarning(isNear) {
+        warning.style.display = isNear ? 'block' : 'none';
+        mainUi.className = isNear ? 'blur' : '';
     }
 
     const params = new URLSearchParams(window.location.search);
     const age = params.get('age') || '20';
+    const mode = params.get('mode') || 'normal';
 
-    // Tasodifiy belgilar bazasi
-    const base = {
-        shapes: ['🍎', '🏠', '🚗', '🌟', '🐶', '🐱', '🐥', '🌳'],
-        letters: ['Ш', 'Б', 'М', 'Н', 'К', 'Ы', 'И', 'П'],
-        numbers: ['8', '5', '2', '9', '6', '3', '0', '4']
+    // Savollar bazasi
+    const library = {
+        shapes: ['🍎', '🚗', '🐶', '🏠', '🌟', '🐱', '🐥', '🌳'],
+        letters: ['Ш', 'Б', 'М', 'Н', 'К', 'Ы', 'И'],
+        numbers: ['1', '2', '3', '5', '6', '8', '9', '0'],
+        colors: ['#e74c3c', '#2ecc71', '#3498db', '#f1c40f']
     };
 
     let step = 0;
     let score = 0;
-    let currentMode = (age === '3') ? 'shapes' : 'letters';
 
-    function render() {
-        if(step === 5 && currentMode !== 'numbers') {
-            currentMode = 'numbers';
-            step = 0;
-            document.getElementById('stage-info').innerText = "2-Bosqich: Raqamlar";
-        } else if(step === 5 && currentMode === 'numbers') {
-            tg.sendData("TEST_FINISHED_" + score);
+    function generateStep() {
+        if(step >= 10) {
+            tg.sendData(mode === 'color' ? "Rang testi tugadi" : "FINISH");
             tg.close();
             return;
         }
 
-        const symbolDiv = document.getElementById('symbol');
-        const btnsDiv = document.getElementById('btns');
-        
-        // Random belgi tanlash
-        const correct = base[currentMode][Math.floor(Math.random() * base[currentMode].length)];
-        symbolDiv.innerText = correct;
-        
-        // O'lchamni kichraytirish (Visus testi)
-        const sizes = [110, 80, 50, 25, 10];
-        symbolDiv.style.fontSize = sizes[step] + "px";
+        const display = document.getElementById('symbol');
+        const btns = document.getElementById('btns');
+        btns.innerHTML = "";
 
-        btnsDiv.innerHTML = "";
+        let currentType;
+        if (mode === 'color') currentType = library.colors;
+        else if (age === '3') currentType = library.shapes;
+        else if (step < 5) currentType = library.letters;
+        else currentType = library.numbers;
+
+        // Tasodifiy tanlash (Yodlab qolmaslik uchun)
+        const correct = currentType[Math.floor(Math.random() * currentType.length)];
+        
+        if (mode === 'color') {
+            display.innerHTML = `<div style="width:100px; height:100px; border-radius:50%; background:${correct}"></div>`;
+        } else {
+            display.innerText = correct;
+            display.style.fontSize = (100 - (step * 9)) + "px"; // Kichrayish effekti
+        }
+
+        // Tasodifiy variantlar
         let opts = [correct];
         while(opts.length < 4) {
-            let r = base[currentMode][Math.floor(Math.random() * base[currentMode].length)];
+            let r = currentType[Math.floor(Math.random() * currentType.length)];
             if(!opts.includes(r)) opts.push(r);
         }
-        
-        opts.sort(() => Math.random() - 0.5).forEach(o => {
+        opts.sort(() => Math.random() - 0.5);
+
+        opts.forEach(o => {
             const b = document.createElement('button');
-            b.innerText = o;
-            b.onclick = () => { if(o === correct) score++; step++; render(); };
-            btnsDiv.appendChild(b);
+            b.innerText = (mode === 'color') ? "Tanlash" : o;
+            if(mode === 'color') b.style.background = o;
+            b.onclick = () => { if(o === correct) score++; step++; generateStep(); };
+            btns.appendChild(b);
         });
     }
 
-    render();
+    generateStep();
 </script>
 </body>
 </html>
