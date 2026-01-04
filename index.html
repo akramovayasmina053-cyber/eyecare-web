@@ -140,7 +140,61 @@
             <div class="card"><b>Rang testi:</b><br>${dalResult}</div>
             <div class="card"><b>Mashq:</b> 20-20-20 qoidasiga amal qiling.</div>`;
     }
+async function setupAI() {
+        const video = document.getElementById('webcam');
+        
+        // 1. Kameraga ruxsat so'rash va video oqimini ulash
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user" }, 
+                audio: false 
+            });
+            video.srcObject = stream;
+        } catch (err) {
+            alert("Kameraga ruxsat berilmadi! Iltimos, sozlamalardan ruxsat bering.");
+            return;
+        }
 
+        const faceMesh = new FaceMesh({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+        });
+
+        faceMesh.setOptions({ 
+            maxNumFaces: 1, 
+            refineLandmarks: false, 
+            minDetectionConfidence: 0.5 
+        });
+
+        faceMesh.onResults(results => {
+            const badge = document.getElementById('distance-badge');
+            const warning = document.getElementById('warning-overlay');
+            const liveDist = document.getElementById('live-dist');
+            
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks[0]) {
+                const p = results.multiFaceLandmarks[0];
+                const d = Math.sqrt(Math.pow(p[33].x - p[263].x, 2) + Math.pow(p[33].y - p[263].y, 2));
+                const cm = Math.round(18 / d); 
+                
+                badge.innerText = `Masofa: ~${cm} sm`;
+                liveDist.innerText = `${cm} sm`;
+
+                if (cm >= 90 && cm <= 110) {
+                    badge.style.background = "#28a745";
+                    warning.style.visibility = "hidden";
+                } else {
+                    // Masofa 90-110 oralig'ida bo'lmasa ogohlantirishni ko'rsatish
+                    badge.style.background = "#dc3545";
+                    warning.style.visibility = "visible";
+                }
+            }
+        });
+
+        const camera = new Camera(video, {
+            onFrame: async () => { await faceMesh.send({image: video}); },
+            width: 640, height: 480
+        });
+        camera.start();
+    }
     async function setupAI() {
         const video = document.getElementById('webcam');
         const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
@@ -163,3 +217,4 @@
                     badge.style.background = "#28a745";
                     warning.style.visibility = "hidden";
                 }
+
