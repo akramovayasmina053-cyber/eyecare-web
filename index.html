@@ -3,62 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>EyeCare+ Professional Vision Test</title>
+    <title>EyeCare+ Vision Test (1m)</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; background: #ffffff; height: 100vh; overflow: hidden; color: #333; }
-        #camera-container { position: relative; width: 100%; height: 15vh; background: #000; border-bottom: 2px solid #eee; }
-        video { width: 100%; height: 100%; object-fit: cover; opacity: 0.5; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; background: #fff; height: 100vh; overflow: hidden; }
+        #camera-container { position: relative; width: 100%; height: 18vh; background: #000; }
+        video { width: 100%; height: 100%; object-fit: cover; }
         #distance-badge { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: #fff; padding: 6px 12px; border-radius: 15px; font-size: 12px; font-weight: bold; z-index: 10; }
-        #test-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 10px; position: relative; }
-        #display-element { font-weight: bold; transition: all 0.3s; user-select: none; text-align: center; margin-bottom: 20px; }
+        #test-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; position: relative; }
+        #display-element { font-weight: bold; transition: all 0.3s; text-align: center; margin-bottom: 25px; }
         .options-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 90%; }
-        .btn { background: #007bff; color: white; border: none; padding: 12px; border-radius: 10px; font-size: 18px; cursor: pointer; transition: 0.2s; }
-        .btn:active { background: #0056b3; }
-        #result-screen { display: none; overflow-y: auto; padding: 20px; text-align: left; background: white; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; }
-        #warning-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); display: flex; align-items: center; justify-content: center; z-index: 50; text-align: center; }
-        .diagnosis-card { background: #f8f9fa; border-left: 5px solid #007bff; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
+        .btn { background: #007bff; color: white; border: none; padding: 15px; border-radius: 10px; font-size: 18px; cursor: pointer; }
+        #warning-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.98); display: flex; align-items: center; justify-content: center; z-index: 50; text-align: center; visibility: visible; }
+        #result-screen { display: none; padding: 20px; background: white; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; overflow-y: auto; }
+        .card { background: #f8f9fa; border-left: 5px solid #007bff; padding: 15px; margin-bottom: 10px; border-radius: 5px; line-height: 1.6; }
     </style>
 </head>
 <body>
 
 <div id="camera-container">
     <video id="webcam" autoplay playsinline></video>
-    <div id="distance-badge">Masofa o'lchanmoqda...</div>
+    <div id="distance-badge">Tayyorlanmoqda...</div>
 </div>
 
 <div id="test-area">
     <div id="warning-overlay">
         <div>
-            <h2 style="color:#dc3545">Masofa noto'g'ri!</h2>
-            <p>Iltimos, telefonni 90-100 sm masofada tuting.</p>
+            <h2 style="color:#dc3545">Masofani saqlang!</h2>
+            <p>Iltimos, telefondan <b>90-100 sm</b> (1 metr) uzoqlikda turing.</p>
+            <p id="live-dist" style="font-weight:bold; font-size:20px;"></p>
         </div>
     </div>
-
-    <div id="step-info" style="font-size: 14px; color: #666; margin-bottom: 5px;"></div>
+    <div id="step-info" style="font-size: 14px; color: #666; margin-bottom: 10px;"></div>
     <div id="display-element"></div>
     <div class="options-container" id="options"></div>
 </div>
 
 <div id="result-screen">
-    <h2 style="text-align: center; color: #007bff;">Test Natijalari</h2>
+    <h2 style="text-align: center; color: #007bff;">Test Yakunlandi</h2>
     <div id="final-diagnosis"></div>
-    <div class="diagnosis-card">
-        <strong>👁️ Umumiy tavsiyalar:</strong><br>
-        - 20-20-20 qoidasi: Har 20 daqiqada 20 metr uzoqlikka 20 soniya qarang.<br>
-        - Quyosh nuri va ko'katlar iste'molini ko'paytiring.
-    </div>
     <button class="btn" style="width:100%" onclick="tg.close()">Botga qaytish</button>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const age = parseInt(urlParams.get('age')) || 20;
+    const age = new URLSearchParams(window.location.search).get('age') || 20;
 
     const assets = {
         kids: ['🐶', '🐱', '🦁', '🍎', '🏠', '🚗', '⭐', '🎈', '🐝', '🍦'],
@@ -67,204 +59,107 @@
         colors: ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF']
     };
 
-    let currentTest = 'main'; // main, numbers, color_choice, color_test
+    let currentTest = (age <= 8) ? 'kids' : 'letters';
     let step = 0;
     let errors = { near: 0, far: 0, color: 0 };
-    let colorTested = false;
     let targetValue = '';
-
-    function initTest() {
-        step = 0;
-        if (age <= 8) {
-            currentTest = 'kids';
-        } else {
-            currentTest = 'letters';
-        }
-        renderStep();
-    }
+    let colorTested = false;
 
     function renderStep() {
         const display = document.getElementById('display-element');
         const optionsDiv = document.getElementById('options');
-        const stepInfo = document.getElementById('step-info');
         optionsDiv.innerHTML = '';
 
-        let pool = [];
-        let totalSteps = 9;
-        
-        // 1. Test turini va poolni aniqlash
-        if (currentTest === 'kids') pool = assets.kids;
-        else if (currentTest === 'letters') pool = assets.letters;
-        else if (currentTest === 'numbers') pool = assets.numbers;
-        else if (currentTest === 'color_test') { pool = assets.colors; totalSteps = 6; }
+        let pool = assets[currentTest];
+        let sizes = [110, 95, 80, 65, 50, 40, 30, 20, 12]; // 1m masofa uchun kichrayish
+        let currentSize = sizes[step];
 
-        // 2. Belgini kichraytirish mantiqi (0.3in dan 0.11in gacha)
-        let sizes = [120, 105, 90, 75, 60, 45, 35, 25, 15]; // Taxminiy piksel o'lchamlari
-        let currentSize = sizes[step] || 15;
-
-        // 3. Savolni tanlash (Random va takrorlanmas)
         targetValue = pool[Math.floor(Math.random() * pool.length)];
-        
-        display.style.fontSize = currentSize + "px";
-        if (currentTest === 'color_test') {
-            display.innerText = "●";
-            display.style.color = targetValue;
-            display.style.fontSize = "100px";
-            stepInfo.innerText = `Rang testi: ${step + 1}/${totalSteps}`;
-        } else {
-            display.innerText = targetValue;
-            display.style.color = "#000";
-            stepInfo.innerText = `Asosiy test (${currentTest}): ${step + 1}/${totalSteps}`;
-        }
+        display.style.fontSize = (currentTest === 'color_test') ? "100px" : currentSize + "px";
+        display.innerText = (currentTest === 'color_test') ? "●" : targetValue;
+        display.style.color = (currentTest === 'color_test') ? targetValue : "#000";
+        document.getElementById('step-info').innerText = `${currentTest} testi: ${step + 1}/9`;
 
-        // 4. Variantlarni yaratish
-        let optionsPool = pool.filter(v => v !== targetValue);
-        let currentOptions = [targetValue];
-        while (currentOptions.length < 4) {
-            let rand = optionsPool[Math.floor(Math.random() * optionsPool.length)];
-            if (!currentOptions.includes(rand)) currentOptions.push(rand);
+        let opts = [targetValue];
+        while(opts.length < 4) {
+            let r = pool[Math.floor(Math.random() * pool.length)];
+            if(!opts.includes(r)) opts.push(r);
         }
-        currentOptions.sort(() => Math.random() - 0.5);
+        opts.sort(() => Math.random() - 0.5);
 
-        currentOptions.forEach(opt => {
+        opts.forEach(opt => {
             const b = document.createElement('button');
             b.className = 'btn';
-            if (currentTest === 'color_test') {
-                b.style.backgroundColor = opt;
-                b.style.height = '50px';
-                b.onclick = () => handleAnswer(opt === targetValue);
-            } else {
-                b.innerText = opt;
-                b.onclick = () => handleAnswer(opt === targetValue);
-            }
+            if(currentTest === 'color_test') b.style.backgroundColor = opt;
+            else b.innerText = opt;
+            b.onclick = () => {
+                if(opt !== targetValue) {
+                    if(currentTest === 'color_test') errors.color++;
+                    else (step < 4) ? errors.near++ : errors.far++;
+                }
+                nextStep();
+            };
             optionsDiv.appendChild(b);
         });
     }
 
-    function handleAnswer(isCorrect) {
-        if (!isCorrect) {
-            if (currentTest === 'color_test') {
-                errors.color++;
-            } else {
-                if (step < 4) errors.near++; // Boshlang'ich 4 ta savol - Yaqinni ko'rish
-                else errors.far++;          // Oxirgi savollar - Uzoqni ko'rish
-            }
-        }
-
+    function nextStep() {
         step++;
-        let maxSteps = (currentTest === 'color_test') ? 6 : 9;
-
-        if (step >= maxSteps) {
-            if (currentTest === 'letters' && age > 8) {
-                currentTest = 'numbers';
-                step = 0;
-                renderStep();
-            } else if (currentTest !== 'color_test') {
-                askColorTest();
-            } else {
-                showResults();
-            }
-        } else {
-            renderStep();
-        }
+        if(step >= 9 || (currentTest === 'color_test' && step >= 6)) {
+            if(currentTest === 'letters' && age > 8) { currentTest = 'numbers'; step = 0; renderStep(); }
+            else if(currentTest !== 'color_test') askColor();
+            else showResults();
+        } else renderStep();
     }
 
-    function askColorTest() {
+    function askColor() {
         document.getElementById('display-element').style.display = 'none';
-        document.getElementById('step-info').innerText = "Asosiy test tugadi";
-        const optionsDiv = document.getElementById('options');
-        optionsDiv.innerHTML = `
-            <p style="grid-column: span 2; text-align:center">Ranglar testini (Daltonizm) ishlaysizmi?</p>
-            <button class="btn" onclick="startColorTest()">Ha, xohlayman</button>
-            <button class="btn" style="background:#666" onclick="showResults()">Yo'q, kerak emas</button>
-        `;
-    }
-
-    function startColorTest() {
-        colorTested = true;
-        currentTest = 'color_test';
-        step = 0;
-        document.getElementById('display-element').style.display = 'block';
-        renderStep();
+        document.getElementById('options').innerHTML = `<p style="grid-column:span 2">Daltonizm testini ishlaysizmi?</p>
+        <button class="btn" onclick="colorTested=true; currentTest='color_test'; step=0; document.getElementById('display-element').style.display='block'; renderStep();">Ha</button>
+        <button class="btn" style="background:#666" onclick="showResults()">Yo'q</button>`;
     }
 
     function showResults() {
         document.getElementById('test-area').style.display = 'none';
-        const screen = document.getElementById('result-screen');
-        const diagDiv = document.getElementById('final-diagnosis');
-        screen.style.display = 'block';
-
-        let mainDiagnosis = "✅ Ko'rish qobiliyati normal.";
-        let medicine = "";
-
+        document.getElementById('result-screen').style.display = 'block';
+        
+        let diag = "✅ Ko'rish qobiliyati normal.";
+        let dori = "";
         if (errors.near >= 2) {
-            mainDiagnosis = "🔍 **Tashxis:** Sizda yaqinni ko'rolmaslik (Gipermetropiya) belgilari bor.";
-            medicine = "💧 **Dori:** 'Sisteyn' (Systane Ultra) - kunda 2 mahal 1 tomchidan.";
+            diag = "🔍 **Tashxis:** Yaqinni ko'rolmaslik (Gipermetropiya).";
+            dori = "💧 **Dori:** Sisteyn tomchisi (kunda 2 mahal 1 tomchidan).";
         } else if (errors.far >= 3) {
-            mainDiagnosis = "🔍 **Tashxis:** Sizda uzoqni ko'rolmaslik (Miopiya) belgilari bor.";
-            medicine = "💊 **Dori:** 'Viziomax' vitaminlari - kunda 1 mahal ovqatdan keyin.";
+            diag = "🔍 **Tashxis:** Uzoqni ko'rolmaslik (Miopiya).";
+            dori = "💊 **Dori:** Viziomax vitamini (kunda 1 mahal 1 tabletka).";
         }
 
-        let colorResult = "";
-        if (colorTested) {
-            if (errors.color >= 3) colorResult = "⚠️ **Rang testi:** Sizda Daltonizm ehtimoli bor, shifokorga murojaat qiling!";
-            else if (errors.color >= 2) colorResult = "🟡 **Rang testi:** Rang ajratish biroz zaiflashgan.";
-            else colorResult = "✅ **Rang testi:** Rang ajratish normal.";
-        } else {
-            colorResult = "⚪ Rang testi o'tkazilmadi.";
-        }
+        let dalResult = colorTested ? (errors.color >= 3 ? "⚠️ Daltonizm ehtimoli! Shifokor ko'rigi shart." : "✅ Rang ajratish normal.") : "⚪ Rang testi o'tkazilmadi.";
 
-        diagDiv.innerHTML = `
-            <div class="diagnosis-card"><strong>Asosiy test:</strong><br>${mainDiagnosis}<br><br>${medicine}</div>
-            <div class="diagnosis-card">${colorResult}</div>
-        `;
+        document.getElementById('final-diagnosis').innerHTML = `
+            <div class="card"><b>Asosiy xulosa:</b><br>${diag}<br>${dori}</div>
+            <div class="card"><b>Rang testi:</b><br>${dalResult}</div>
+            <div class="card"><b>Mashq:</b> 20-20-20 qoidasiga amal qiling.</div>`;
     }
 
-    // --- KAMERA VA AI QISMI (O'ZGARISSIZ) ---
     async function setupAI() {
+        const video = document.getElementById('webcam');
         const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: false, minDetectionConfidence: 0.5 });
+
         faceMesh.onResults(results => {
+            const badge = document.getElementById('distance-badge');
+            const warning = document.getElementById('warning-overlay');
+            const liveDist = document.getElementById('live-dist');
+            
             if (results.multiFaceLandmarks && results.multiFaceLandmarks[0]) {
                 const p = results.multiFaceLandmarks[0];
                 const d = Math.sqrt(Math.pow(p[33].x - p[263].x, 2) + Math.pow(p[33].y - p[263].y, 2));
-                const cm = Math.round(13 / d);
-                const badge = document.getElementById('distance-badge');
-                const warning = document.getElementById('warning-overlay');
+                const cm = Math.round(18 / d); // 1m masofaga moslangan formula
+                
                 badge.innerText = `Masofa: ~${cm} sm`;
+                liveDist.innerText = `${cm} sm`;
 
-                if (cm >= 90 && cm <= 100) {
+                if (cm >= 90 && cm <= 110) {
                     badge.style.background = "#28a745";
-                    warning.style.display = "none";
-                } else {
-                    badge.style.background = "#dc3545";
-                    warning.style.display = "flex";
+                    warning.style.visibility = "hidden";
                 }
-            }
-        });
-
-        const videoElement = document.getElementById('webcam');
-        async function prediction() {
-            await faceMesh.send({image: videoElement});
-            requestAnimationFrame(prediction);
-        }
-        prediction();
-    }
-
-    function initExperience() {
-        document.getElementById('options').innerHTML = "Kamera tayyorlanmoqda...";
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
-        .then(stream => {
-            document.getElementById('webcam').srcObject = stream;
-            setupAI();
-            initTest();
-        });
-    }
-
-    window.onload = () => {
-        document.getElementById('display-element').innerText = "👁️";
-        document.getElementById('options').innerHTML = `<button class="btn" style="grid-column: span 2" onclick="initExperience()">Boshlash</button>`;
-    };
-</script>
-</body>
-</html>
